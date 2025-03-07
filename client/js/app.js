@@ -2,6 +2,8 @@
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log');
+const chat = document.getElementById('chat'); // Neuer Chat-Bereich
+const messageInput = document.getElementById('messageInput'); // Neues Eingabefeld
 let pc; // PeerConnection
 let dataChannel; // Für MIDI-Daten
 let localStream;
@@ -12,21 +14,22 @@ function addLog(msg) {
     log.textContent += `${msg}\n`;
 }
 
+// Chat-Nachricht anzeigen
+function addChatMessage(msg) {
+    chat.textContent += `${msg}\n`;
+    chat.scrollTop = chat.scrollHeight; // Auto-Scroll nach unten
+}
+
 // WebSocket-Verbindung aufbauen
 function initWebSocket() {
     ws = new WebSocket('ws://localhost:8080');
-    ws.binaryType = 'arraybuffer';
     ws.onopen = () => addLog('WebSocket connected, Junge!');
     ws.onmessage = (event) => {
-        if (typeof event.data === 'string') {
-            try {
-                handleSignaling(JSON.parse(event.data));
-                console.log('GEIIEIEIEL')
-            } catch (e) {
-                addLog(`JSON Parse Fehler: ${e}`);
-            }
+        const data = JSON.parse(event.data);
+        if (data.type === 'chat') {
+            addChatMessage(`Anderer Digga: ${data.message}`);
         } else {
-            addLog(`Unerwartete Daten empfangen: ${event.data}`);
+            handleSignaling(data); // Signaling-Nachrichten
         }
     };
     ws.onerror = (err) => addLog(`WebSocket Fehler: ${err}`);
@@ -39,10 +42,10 @@ async function startMedia() {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
         addLog('Media gestartet, Junge!');
-        return true; // Erfolg
+        return true;
     } catch (err) {
         addLog(`Fehler bei Media: ${err}`);
-        return false; // Fehler
+        return false;
     }
 }
 
@@ -52,45 +55,29 @@ async function startCall() {
         addLog('WebSocket nicht bereit, Junge!');
         return;
     }
-
-    // Prüfen, ob localStream bereit ist
     if (!localStream) {
         addLog('Media noch nicht bereit, Junge! Warte mal!');
         return;
     }
-
-    // PeerConnection initialisieren
     pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
-
-    // Lokalen Stream hinzufügen
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    // DataChannel für MIDI (nur für Offer-Seite)
     dataChannel = pc.createDataChannel('midiChannel');
     setupDataChannel(dataChannel);
-
-    // DataChannel vom Remote-Peer empfangen (für Answer-Seite)
     pc.ondatachannel = (event) => {
         dataChannel = event.channel;
         setupDataChannel(dataChannel);
     };
-
-    // ICE-Kandidaten handlen
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
         }
     };
-
-    // Remote-Stream empfangen
     pc.ontrack = (event) => {
         remoteVideo.srcObject = event.streams[0];
         addLog('Remote-Stream da, Junge!');
     };
-
-    // Offer erstellen
     try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -118,14 +105,11 @@ async function handleSignaling(message) {
         addLog('Kein PeerConnection, Junge! Starte erst den Call.');
         return;
     }
-
     try {
         if (message.type === 'offer') {
             await pc.setRemoteDescription({ type: 'offer', sdp: message.sdp });
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            console.log(answer);
-            console.log(answer.sdp);
             ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
             addLog('Answer gesendet, Junge!');
         } else if (message.type === 'answer') {
@@ -146,7 +130,7 @@ async function connectMidi() {
         const midiAccess = await navigator.requestMIDIAccess();
         midiAccess.inputs.forEach(input => {
             input.onmidimessage = (message) => {
-                const midiData = Array.from(message.data); // [status, note, velocity]
+                const midiData = Array.from(message.data);
                 addLog(`MIDI lokal gesendet: [${midiData}]`);
                 if (dataChannel && dataChannel.readyState === 'open') {
                     dataChannel.send(JSON.stringify(midiData));
@@ -161,6 +145,18 @@ async function connectMidi() {
     }
 }
 
+// Chat-Nachricht senden
+function sendChatMessage() {
+    const message = messageInput.value.trim();
+    if (message && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'chat', message: message }));
+        addChatMessage(`Du: ${message}`);
+        messageInput.value = ''; // Eingabe leeren
+    } else {
+        addLog('Chat-Nachricht nicht gesendet: WebSocket nicht offen oder leer!');
+    }
+}
+
 // Initialisierung
 async function init() {
     initWebSocket();
@@ -170,5 +166,4 @@ async function init() {
     }
 }
 
-// Los geht’s
 init();

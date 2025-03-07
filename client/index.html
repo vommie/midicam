@@ -6,6 +6,8 @@
     <style>
         video { width: 300px; border: 1px solid #ccc; }
         #log { white-space: pre-wrap; }
+        #chat { white-space: pre-wrap; border: 1px solid #ccc; height: 200px; overflow-y: auto; }
+        #messageInput { width: 200px; }
     </style>
 </head>
 <body>
@@ -15,6 +17,11 @@
     <button onclick="startCall()">Anruf starten</button>
     <button onclick="connectMidi()">MIDI connecten</button>
     <pre id="log"></pre>
+
+    <h2>Chat</h2>
+    <div id="chat"></div>
+    <input type="text" id="messageInput" placeholder="Nachricht eingeben">
+    <button onclick="sendChatMessage()">Senden</button>
 
     <script src="js/app.js"></script>
 </body>

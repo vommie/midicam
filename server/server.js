@@ -1,4 +1,3 @@
-// server.js
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080 });
 
@@ -8,11 +7,18 @@ wss.on('connection', (ws) => {
         // Buffer in String umwandeln
         const messageString = message.toString('utf8');
         console.log('Empfangene Nachricht:', messageString, typeof messageString);
-        wss.clients.forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(messageString);
-                console.log("sending message");
-            }
-        });
+
+        try {
+            const data = JSON.parse(messageString);
+            // Weiterleitung an alle anderen Clients
+            wss.clients.forEach(client => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify(data)); // Sende als String zurück
+                    console.log("sending message:", data.type);
+                }
+            });
+        } catch (e) {
+            console.log('Fehler beim Parsen der Nachricht:', e);
+        }
     });
 });
