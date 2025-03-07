@@ -5,10 +5,13 @@ const wss = new WebSocket.Server({ port: 8080 });
 wss.on('connection', (ws) => {
     console.log('Neuer Digga connected!');
     ws.on('message', (message) => {
+        // Buffer in String umwandeln
+        const messageString = message.toString('utf8');
+        console.log('Empfangene Nachricht:', messageString, typeof messageString);
         wss.clients.forEach(client => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(message);
-                console.log("sending message")
+                client.send(messageString);
+                console.log("sending message");
             }
         });
     });

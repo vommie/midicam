@@ -15,8 +15,20 @@ function addLog(msg) {
 // WebSocket-Verbindung aufbauen
 function initWebSocket() {
     ws = new WebSocket('ws://localhost:8080');
+    ws.binaryType = 'arraybuffer';
     ws.onopen = () => addLog('WebSocket connected, Junge!');
-    ws.onmessage = (event) => handleSignaling(JSON.parse(event.data));
+    ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+            try {
+                handleSignaling(JSON.parse(event.data));
+                console.log('GEIIEIEIEL')
+            } catch (e) {
+                addLog(`JSON Parse Fehler: ${e}`);
+            }
+        } else {
+            addLog(`Unerwartete Daten empfangen: ${event.data}`);
+        }
+    };
     ws.onerror = (err) => addLog(`WebSocket Fehler: ${err}`);
     ws.onclose = () => addLog('WebSocket zu, Junge!');
 }
