@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>MidiCamDigga</title>
+    <style>
+        video { width: 300px; border: 1px solid #ccc; }
+        #log { white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>MidiCamDigga</h1>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
+    <button onclick="startCall()">Anruf starten</button>
+    <button onclick="connectMidi()">MIDI connecten</button>
+    <pre id="log"></pre>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

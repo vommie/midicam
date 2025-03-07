@@ -1,0 +1,11 @@
+.DS_Store
+.DS_Store?
+style.css.map
+.idea/
+.vscode/
+*.log
+node_modules/
+*.temp.po
+nfo/
+src/vendor-composer/
+dist/
