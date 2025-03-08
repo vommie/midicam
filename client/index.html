@@ -28,6 +28,10 @@
         <label for="micVolume">Mikrofon-Lautstärke:</label>
         <input type="range" id="micVolume" min="0" max="1" step="0.1" value="1" oninput="adjustMicVolume()">
     </div>
+    <div>
+        <label for="midiSelect">MIDI-Gerät:</label>
+        <select id="midiSelect" onchange="connectMidi()"></select>
+    </div>
     <pre id="log"></pre>
 
     <h2>Chat</h2>

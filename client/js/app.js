@@ -7,14 +7,16 @@ const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
+const midiSelect = document.getElementById('midiSelect'); // Neuer MIDI-Dropdown
 let pc;
 let dataChannel;
 let localStream;
 let ws;
 let audioContext;
 let gainNode;
-let currentVideoId = ''; // Aktuelle Video-ID speichern
-let currentAudioId = ''; // Aktuelle Audio-ID speichern
+let currentVideoId = '';
+let currentAudioId = '';
+let midiAccess = null; // Für MIDI-Zugriff
 
 // Logging-Funktion
 function addLog(msg) {
@@ -48,7 +50,8 @@ function saveSettings() {
     const settings = {
         videoDeviceId: videoSelect.value,
         audioDeviceId: audioSelect.value,
-        micVolume: micVolume.value
+        micVolume: micVolume.value,
+        midiDeviceId: midiSelect.value
     };
     localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
     addLog('Einstellungen gespeichert, Junge!');
@@ -58,8 +61,7 @@ function saveSettings() {
 function loadSettings() {
     const savedSettings = localStorage.getItem('midiCamDiggaSettings');
     if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        return settings;
+        return JSON.parse(savedSettings);
     }
     return null;
 }
@@ -100,6 +102,46 @@ async function populateDeviceOptions() {
     }
 }
 
+// MIDI-Geräte auflisten und Dropdown befüllen
+async function populateMidiOptions() {
+    try {
+        midiAccess = await navigator.requestMIDIAccess();
+        const inputs = Array.from(midiAccess.inputs.values());
+
+        midiSelect.innerHTML = inputs.map(input =>
+            `<option value="${input.id}">${input.name || 'MIDI ' + input.id.slice(0, 5)}</option>`
+        ).join('') || '<option value="">Keine MIDI-Geräte</option>';
+
+        const settings = loadSettings();
+        if (settings && settings.midiDeviceId && inputs.some(input => input.id === settings.midiDeviceId)) {
+            midiSelect.value = settings.midiDeviceId;
+        } else {
+            midiSelect.value = inputs[0]?.id || '';
+        }
+
+        // Listener für Geräteänderungen
+        midiAccess.onstatechange = (event) => {
+            const inputs = Array.from(midiAccess.inputs.values());
+            const selectedId = midiSelect.value;
+            midiSelect.innerHTML = inputs.map(input =>
+                `<option value="${input.id}">${input.name || 'MIDI ' + input.id.slice(0, 5)}</option>`
+            ).join('') || '<option value="">Keine MIDI-Geräte</option>';
+            // Versuche, das vorher ausgewählte Gerät beizubehalten
+            if (inputs.some(input => input.id === selectedId)) {
+                midiSelect.value = selectedId;
+            } else {
+                midiSelect.value = inputs[0]?.id || '';
+            }
+            addLog(`MIDI-Geräte aktualisiert: ${event.port.state} - ${event.port.name}`);
+            connectMidi(); // Neu verbinden, wenn Geräte ändern
+        };
+
+        addLog('MIDI-Geräte geladen, Junge!');
+    } catch (err) {
+        addLog(`Fehler beim Laden der MIDI-Geräte: ${err}`);
+    }
+}
+
 // Webcam und Audio starten
 async function startMedia() {
     try {
@@ -121,7 +163,6 @@ async function startMedia() {
             source.connect(gainNode);
             const destination = audioContext.createMediaStreamDestination();
             gainNode.connect(destination);
-
             const videoTracks = localStream.getVideoTracks();
             const audioTrack = destination.stream.getAudioTracks()[0];
             localStream = new MediaStream([...videoTracks, audioTrack]);
@@ -141,7 +182,6 @@ async function startMedia() {
 }
 
 // Media-Stream umschalten
-// Media-Stream umschalten
 async function switchMedia() {
     const newVideoId = videoSelect.value;
     const newAudioId = audioSelect.value;
@@ -155,7 +195,6 @@ async function switchMedia() {
 
     try {
         if (videoChanged && audioChanged) {
-            // Beides gewechselt: Komplett neu initialisieren
             if (localStream) localStream.getTracks().forEach(track => track.stop());
             if (audioContext) audioContext.close();
             const constraints = {
@@ -180,13 +219,11 @@ async function switchMedia() {
                 localVideo.srcObject = localStream;
             }
         } else if (audioChanged) {
-            // Nur Audio gewechselt: Video beibehalten, Audio aktualisieren
             const audioConstraints = { audio: newAudioId ? { deviceId: { exact: newAudioId } } : false };
             addLog(`Nur Audio umschalten mit: ${JSON.stringify(audioConstraints)}`);
             const audioStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
             const newAudioTrack = audioStream.getAudioTracks()[0];
 
-            // Bestehenden Audio-Track im Stream ersetzen
             if (localStream && localStream.getAudioTracks().length > 0) {
                 const oldAudioTrack = localStream.getAudioTracks()[0];
                 localStream.removeTrack(oldAudioTrack);
@@ -194,10 +231,7 @@ async function switchMedia() {
             }
             localStream.addTrack(newAudioTrack);
 
-            // AudioContext aktualisieren, ohne ihn neu zu erstellen
-            if (audioContext) {
-                audioContext.close();
-            }
+            if (audioContext) audioContext.close();
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             const source = audioContext.createMediaStreamSource(new MediaStream([newAudioTrack]));
             gainNode = audioContext.createGain();
@@ -206,14 +240,9 @@ async function switchMedia() {
             const destination = audioContext.createMediaStreamDestination();
             gainNode.connect(destination);
             const adjustedAudioTrack = destination.stream.getAudioTracks()[0];
-
-            // Audio-Track im Stream erneut ersetzen
             localStream.removeTrack(newAudioTrack);
             localStream.addTrack(adjustedAudioTrack);
-
-            // Keine Neuzuweisung von localVideo.srcObject nötig!
         } else if (videoChanged) {
-            // Nur Video gewechselt: Alten Audio-Track beibehalten
             if (localStream && localStream.getVideoTracks().length > 0) {
                 localStream.getVideoTracks().forEach(track => track.stop());
             }
@@ -225,10 +254,9 @@ async function switchMedia() {
                 localStream.removeTrack(localStream.getVideoTracks()[0]);
             }
             localStream.addTrack(videoTrack);
-            localVideo.srcObject = localStream; // Hier nötig, da Video gewechselt wurde
+            localVideo.srcObject = localStream;
         }
 
-        // Tracks in bestehender PeerConnection aktualisieren
         if (pc) {
             const senders = pc.getSenders();
             const videoTrack = localStream.getVideoTracks()[0];
@@ -257,6 +285,41 @@ function adjustMicVolume() {
         gainNode.gain.value = parseFloat(micVolume.value);
         addLog(`Mikrofon-Lautstärke auf ${micVolume.value} gesetzt, Junge!`);
         saveSettings();
+    }
+}
+
+// MIDI-Zugriff und Senden
+async function connectMidi() {
+    if (!midiAccess) {
+        addLog('MIDI-Zugriff nicht initialisiert, Junge! Warte mal.');
+        return;
+    }
+    try {
+        const selectedMidiId = midiSelect.value;
+        const inputs = Array.from(midiAccess.inputs.values());
+
+        // Alte Listener entfernen
+        inputs.forEach(input => input.onmidimessage = null);
+
+        // Listener nur für ausgewähltes Gerät setzen
+        const selectedInput = inputs.find(input => input.id === selectedMidiId);
+        if (selectedInput) {
+            selectedInput.onmidimessage = (message) => {
+                const midiData = Array.from(message.data);
+                addLog(`MIDI lokal gesendet: [${midiData}]`);
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    dataChannel.send(JSON.stringify(midiData));
+                } else {
+                    addLog('MIDI-Kanal nicht offen, Junge!');
+                }
+            };
+            addLog(`MIDI connected zu: ${selectedInput.name}, Junge!`);
+        } else {
+            addLog('Kein MIDI-Gerät ausgewählt oder verfügbar, Junge!');
+        }
+        saveSettings();
+    } catch (err) {
+        addLog(`MIDI-Fehler: ${err}`);
     }
 }
 
@@ -335,27 +398,6 @@ async function handleSignaling(message) {
     }
 }
 
-// MIDI-Zugriff und Senden
-async function connectMidi() {
-    try {
-        const midiAccess = await navigator.requestMIDIAccess();
-        midiAccess.inputs.forEach(input => {
-            input.onmidimessage = (message) => {
-                const midiData = Array.from(message.data);
-                addLog(`MIDI lokal gesendet: [${midiData}]`);
-                if (dataChannel && dataChannel.readyState === 'open') {
-                    dataChannel.send(JSON.stringify(midiData));
-                } else {
-                    addLog('MIDI-Kanal nicht offen, Junge!');
-                }
-            };
-        });
-        addLog('MIDI connected, Junge!');
-    } catch (err) {
-        addLog(`MIDI-Fehler: ${err}`);
-    }
-}
-
 // Chat-Nachricht senden
 function sendChatMessage() {
     const message = messageInput.value.trim();
@@ -372,11 +414,13 @@ function sendChatMessage() {
 async function init() {
     initWebSocket();
     await populateDeviceOptions();
+    await populateMidiOptions(); // MIDI-Geräte initial laden
     const mediaReady = await startMedia();
     if (!mediaReady) {
         addLog('Media-Setup fehlgeschlagen, Junge! Check mal Kamera/Mikro.');
     }
     adjustMicVolume();
+    await connectMidi(); // MIDI initial verbinden
 }
 
 init();
