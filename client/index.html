@@ -16,6 +16,14 @@
     <video id="remoteVideo" autoplay></video>
     <button onclick="startCall()">Anruf starten</button>
     <button onclick="connectMidi()">MIDI connecten</button>
+    <div>
+        <label for="videoSelect">Kamera:</label>
+        <select id="videoSelect" onchange="switchMedia()"></select>
+    </div>
+    <div>
+        <label for="audioSelect">Mikrofon:</label>
+        <select id="audioSelect" onchange="switchMedia()"></select>
+    </div>
     <pre id="log"></pre>
 
     <h2>Chat</h2>

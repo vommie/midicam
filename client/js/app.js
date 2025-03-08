@@ -2,12 +2,14 @@
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log');
-const chat = document.getElementById('chat'); // Neuer Chat-Bereich
-const messageInput = document.getElementById('messageInput'); // Neues Eingabefeld
-let pc; // PeerConnection
-let dataChannel; // Für MIDI-Daten
+const chat = document.getElementById('chat');
+const messageInput = document.getElementById('messageInput');
+const videoSelect = document.getElementById('videoSelect'); // Neuer Video-Dropdown
+const audioSelect = document.getElementById('audioSelect'); // Neuer Audio-Dropdown
+let pc;
+let dataChannel;
 let localStream;
-let ws; // WebSocket
+let ws;
 
 // Logging-Funktion
 function addLog(msg) {
@@ -17,7 +19,7 @@ function addLog(msg) {
 // Chat-Nachricht anzeigen
 function addChatMessage(msg) {
     chat.textContent += `${msg}\n`;
-    chat.scrollTop = chat.scrollHeight; // Auto-Scroll nach unten
+    chat.scrollTop = chat.scrollHeight;
 }
 
 // WebSocket-Verbindung aufbauen
@@ -29,23 +31,81 @@ function initWebSocket() {
         if (data.type === 'chat') {
             addChatMessage(`Anderer Digga: ${data.message}`);
         } else {
-            handleSignaling(data); // Signaling-Nachrichten
+            handleSignaling(data);
         }
     };
     ws.onerror = (err) => addLog(`WebSocket Fehler: ${err}`);
     ws.onclose = () => addLog('WebSocket zu, Junge!');
 }
 
+// Geräte auflisten und Dropdowns befüllen
+async function populateDeviceOptions() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const audioDevices = devices.filter(device => device.kind === 'audioinput');
+
+        videoSelect.innerHTML = videoDevices.map(device =>
+            `<option value="${device.deviceId}">${device.label || 'Kamera ' + device.deviceId.slice(0, 5)}</option>`
+        ).join('');
+        audioSelect.innerHTML = audioDevices.map(device =>
+            `<option value="${device.deviceId}">${device.label || 'Mikrofon ' + device.deviceId.slice(0, 5)}</option>`
+        ).join('');
+
+        addLog('Geräte geladen, Junge!');
+    } catch (err) {
+        addLog(`Fehler beim Laden der Geräte: ${err}`);
+    }
+}
+
 // Webcam und Audio starten
 async function startMedia() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const videoId = videoSelect.value || true; // Standard: erste Kamera
+        const audioId = audioSelect.value || true; // Standard: erstes Mikrofon
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: videoId === 'true' ? true : { deviceId: { exact: videoId } },
+            audio: audioId === 'true' ? true : { deviceId: { exact: audioId } }
+        });
         localVideo.srcObject = localStream;
         addLog('Media gestartet, Junge!');
         return true;
     } catch (err) {
         addLog(`Fehler bei Media: ${err}`);
         return false;
+    }
+}
+
+// Media-Stream umschalten
+async function switchMedia() {
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop()); // Alte Tracks stoppen
+    }
+    try {
+        const videoId = videoSelect.value;
+        const audioId = audioSelect.value;
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: videoId ? { deviceId: { exact: videoId } } : false,
+            audio: audioId ? { deviceId: { exact: audioId } } : false
+        });
+        localVideo.srcObject = localStream;
+
+        // Tracks in bestehender PeerConnection aktualisieren
+        if (pc) {
+            const senders = pc.getSenders();
+            const videoTrack = localStream.getVideoTracks()[0];
+            const audioTrack = localStream.getAudioTracks()[0];
+            senders.forEach(sender => {
+                if (sender.track.kind === 'video' && videoTrack) {
+                    sender.replaceTrack(videoTrack);
+                } else if (sender.track.kind === 'audio' && audioTrack) {
+                    sender.replaceTrack(audioTrack);
+                }
+            });
+        }
+        addLog('Media umgeschaltet, Junge!');
+    } catch (err) {
+        addLog(`Fehler beim Umschalten: ${err}`);
     }
 }
 
@@ -151,7 +211,7 @@ function sendChatMessage() {
     if (message && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'chat', message: message }));
         addChatMessage(`Du: ${message}`);
-        messageInput.value = ''; // Eingabe leeren
+        messageInput.value = '';
     } else {
         addLog('Chat-Nachricht nicht gesendet: WebSocket nicht offen oder leer!');
     }
@@ -160,6 +220,7 @@ function sendChatMessage() {
 // Initialisierung
 async function init() {
     initWebSocket();
+    await populateDeviceOptions(); // Geräte laden vor Media-Start
     const mediaReady = await startMedia();
     if (!mediaReady) {
         addLog('Media-Setup fehlgeschlagen, Junge! Check mal Kamera/Mikro.');
