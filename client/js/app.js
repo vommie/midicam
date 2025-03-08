@@ -8,7 +8,7 @@ const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
-const midiOutputSelect = document.getElementById('midiOutputSelect'); // Neuer MIDI-Ausgang-Dropdown
+const midiOutputSelect = document.getElementById('midiOutputSelect');
 let pc;
 let dataChannel;
 let localStream;
@@ -111,26 +111,30 @@ async function populateMidiOptions() {
         const inputs = Array.from(midiAccess.inputs.values());
         const outputs = Array.from(midiAccess.outputs.values());
 
-        // MIDI-Eingänge
-        midiSelect.innerHTML = inputs.map(input =>
-            `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
-        ).join('') || '<option value="">Keine MIDI-Eingänge</option>';
+        // MIDI-Eingänge mit "Kein Gerät"-Option
+        midiSelect.innerHTML = '<option value="">Kein MIDI-Eingang</option>' +
+            inputs.map(input =>
+                `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
+            ).join('');
 
-        // MIDI-Ausgänge
-        midiOutputSelect.innerHTML = outputs.map(output =>
-            `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
-        ).join('') || '<option value="">Keine MIDI-Ausgänge</option>';
+        // MIDI-Ausgänge mit "Kein Gerät"-Option
+        midiOutputSelect.innerHTML = '<option value="">Kein MIDI-Ausgang</option>' +
+            outputs.map(output =>
+                `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
+            ).join('');
 
         const settings = loadSettings();
+        // MIDI-Eingang: Standard "Kein Gerät", außer gespeicherter Wert ist verfügbar
         if (settings && settings.midiDeviceId && inputs.some(input => input.id === settings.midiDeviceId)) {
             midiSelect.value = settings.midiDeviceId;
         } else {
-            midiSelect.value = inputs[0]?.id || '';
+            midiSelect.value = ''; // Standard: Kein Gerät
         }
+        // MIDI-Ausgang: Standard "Kein Gerät", außer gespeicherter Wert ist verfügbar
         if (settings && settings.midiOutputDeviceId && outputs.some(output => output.id === settings.midiOutputDeviceId)) {
             midiOutputSelect.value = settings.midiOutputDeviceId;
         } else {
-            midiOutputSelect.value = outputs[0]?.id || '';
+            midiOutputSelect.value = ''; // Standard: Kein Gerät
         }
 
         // Listener für Geräteänderungen
@@ -140,26 +144,28 @@ async function populateMidiOptions() {
             const selectedInputId = midiSelect.value;
             const selectedOutputId = midiOutputSelect.value;
 
-            midiSelect.innerHTML = inputs.map(input =>
-                `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
-            ).join('') || '<option value="">Keine MIDI-Eingänge</option>';
-            midiOutputSelect.innerHTML = outputs.map(output =>
-                `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
-            ).join('') || '<option value="">Keine MIDI-Ausgänge</option>';
+            midiSelect.innerHTML = '<option value="">Kein MIDI-Eingang</option>' +
+                inputs.map(input =>
+                    `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
+                ).join('');
+            midiOutputSelect.innerHTML = '<option value="">Kein MIDI-Ausgang</option>' +
+                outputs.map(output =>
+                    `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
+                ).join('');
 
             if (inputs.some(input => input.id === selectedInputId)) {
                 midiSelect.value = selectedInputId;
             } else {
-                midiSelect.value = inputs[0]?.id || '';
+                midiSelect.value = '';
             }
             if (outputs.some(output => output.id === selectedOutputId)) {
                 midiOutputSelect.value = selectedOutputId;
             } else {
-                midiOutputSelect.value = outputs[0]?.id || '';
+                midiOutputSelect.value = '';
             }
 
             addLog(`MIDI-Geräte aktualisiert: ${event.port.state} - ${event.port.name}`);
-            connectMidi(); // Eingänge neu verbinden
+            connectMidi();
         };
 
         addLog('MIDI-Geräte geladen, Junge!');
@@ -327,21 +333,25 @@ async function connectMidi() {
         // Alte Listener entfernen
         inputs.forEach(input => input.onmidimessage = null);
 
-        // Listener nur für ausgewähltes Gerät setzen
-        const selectedInput = inputs.find(input => input.id === selectedMidiId);
-        if (selectedInput) {
-            selectedInput.onmidimessage = (message) => {
-                const midiData = Array.from(message.data);
-                addLog(`MIDI lokal gesendet: [${midiData}]`);
-                if (dataChannel && dataChannel.readyState === 'open') {
-                    dataChannel.send(JSON.stringify(midiData));
-                } else {
-                    addLog('MIDI-Kanal nicht offen, Junge!');
-                }
-            };
-            addLog(`MIDI-Eingang connected zu: ${selectedInput.name}, Junge!`);
+        // Nur Listener setzen, wenn ein Gerät ausgewählt ist
+        if (selectedMidiId) {
+            const selectedInput = inputs.find(input => input.id === selectedMidiId);
+            if (selectedInput) {
+                selectedInput.onmidimessage = (message) => {
+                    const midiData = Array.from(message.data);
+                    addLog(`MIDI lokal gesendet: [${midiData}]`);
+                    if (dataChannel && dataChannel.readyState === 'open') {
+                        dataChannel.send(JSON.stringify(midiData));
+                    } else {
+                        addLog('MIDI-Kanal nicht offen, Junge!');
+                    }
+                };
+                addLog(`MIDI-Eingang connected zu: ${selectedInput.name}, Junge!`);
+            } else {
+                addLog('Ausgewähltes MIDI-Eingangsgerät nicht verfügbar, Junge!');
+            }
         } else {
-            addLog('Kein MIDI-Eingang ausgewählt oder verfügbar, Junge!');
+            addLog('Kein MIDI-Eingang ausgewählt, keine Signale werden verarbeitet.');
         }
         saveSettings();
     } catch (err) {
@@ -395,17 +405,19 @@ function setupDataChannel(channel) {
         const midiData = JSON.parse(event.data);
         addLog(`MIDI vom anderen empfangen: [${midiData}]`);
 
-        // MIDI-Daten an ausgewähltes Ausgabegerät senden
-        if (midiAccess) {
+        // MIDI-Daten an ausgewähltes Ausgabegerät senden, wenn eines gewählt ist
+        if (midiAccess && midiOutputSelect.value) {
             const selectedOutputId = midiOutputSelect.value;
             const outputs = Array.from(midiAccess.outputs.values());
             const selectedOutput = outputs.find(output => output.id === selectedOutputId);
             if (selectedOutput) {
-                selectedOutput.send(midiData); // MIDI-Daten an Ausgabegerät senden
+                selectedOutput.send(midiData);
                 addLog(`MIDI an ${selectedOutput.name} gesendet, Junge!`);
             } else {
-                addLog('Kein MIDI-Ausgang ausgewählt oder verfügbar, Junge!');
+                addLog('Ausgewähltes MIDI-Ausgangsgerät nicht verfügbar, Junge!');
             }
+        } else {
+            addLog('Kein MIDI-Ausgang ausgewählt, keine Signale werden ausgegeben.');
         }
     };
     channel.onerror = (err) => addLog(`DataChannel Fehler: ${err}`);
@@ -453,13 +465,13 @@ function sendChatMessage() {
 async function init() {
     initWebSocket();
     await populateDeviceOptions();
-    await populateMidiOptions(); // MIDI-Ein-/Ausgänge initial laden
+    await populateMidiOptions();
     const mediaReady = await startMedia();
     if (!mediaReady) {
         addLog('Media-Setup fehlgeschlagen, Junge! Check mal Kamera/Mikro.');
     }
     adjustMicVolume();
-    await connectMidi(); // MIDI-Eingang initial verbinden
+    await connectMidi();
 }
 
 init();
