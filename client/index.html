@@ -29,8 +29,12 @@
         <input type="range" id="micVolume" min="0" max="1" step="0.1" value="1" oninput="adjustMicVolume()">
     </div>
     <div>
-        <label for="midiSelect">MIDI-Gerät:</label>
+        <label for="midiSelect">MIDI-Eingang:</label>
         <select id="midiSelect" onchange="connectMidi()"></select>
+    </div>
+    <div>
+        <label for="midiOutputSelect">MIDI-Ausgang:</label>
+        <select id="midiOutputSelect" onchange="saveSettings()"></select>
     </div>
     <pre id="log"></pre>
 
