@@ -8,6 +8,26 @@
         #log { white-space: pre-wrap; }
         #chat { white-space: pre-wrap; border: 1px solid #ccc; height: 200px; overflow-y: auto; }
         #messageInput { width: 200px; }
+        #fileList {
+            border: 1px solid #ccc;
+            min-height: 100px;
+            padding: 10px;
+            margin-top: 10px;
+            background: #f9f9f9;
+        }
+        #fileList.dragover {
+            background: #e0e0e0;
+        }
+        .file-item {
+            padding: 5px;
+            cursor: pointer;
+        }
+        .file-item.sent {
+            background: #d4edda; /* Grünlich für gesendet */
+        }
+        .file-item.received {
+            background: #cce5ff; /* Bläulich für empfangen */
+        }
     </style>
 </head>
 <body>
@@ -35,6 +55,9 @@
     <div>
         <label for="midiOutputSelect">MIDI-Ausgang:</label>
         <select id="midiOutputSelect" onchange="saveSettings()"></select>
+    </div>
+    <div id="fileList" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+        <p>Dateien hierher ziehen oder fallen lassen</p>
     </div>
     <pre id="log"></pre>
 

@@ -9,8 +9,10 @@ const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
+const fileList = document.getElementById('fileList');
 let pc;
-let dataChannel;
+let midiChannel;
+let fileChannel;
 let localStream;
 let ws;
 let audioContext;
@@ -18,6 +20,8 @@ let gainNode;
 let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
+let isFileSharingReady = false;
+const CHUNK_SIZE = 16384;
 
 // Logging-Funktion
 function addLog(msg) {
@@ -111,33 +115,27 @@ async function populateMidiOptions() {
         const inputs = Array.from(midiAccess.inputs.values());
         const outputs = Array.from(midiAccess.outputs.values());
 
-        // MIDI-Eingänge mit "Kein Gerät"-Option
         midiSelect.innerHTML = '<option value="">Kein MIDI-Eingang</option>' +
             inputs.map(input =>
                 `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
             ).join('');
-
-        // MIDI-Ausgänge mit "Kein Gerät"-Option
         midiOutputSelect.innerHTML = '<option value="">Kein MIDI-Ausgang</option>' +
             outputs.map(output =>
                 `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
             ).join('');
 
         const settings = loadSettings();
-        // MIDI-Eingang: Standard "Kein Gerät", außer gespeicherter Wert ist verfügbar
         if (settings && settings.midiDeviceId && inputs.some(input => input.id === settings.midiDeviceId)) {
             midiSelect.value = settings.midiDeviceId;
         } else {
-            midiSelect.value = ''; // Standard: Kein Gerät
+            midiSelect.value = '';
         }
-        // MIDI-Ausgang: Standard "Kein Gerät", außer gespeicherter Wert ist verfügbar
         if (settings && settings.midiOutputDeviceId && outputs.some(output => output.id === settings.midiOutputDeviceId)) {
             midiOutputSelect.value = settings.midiOutputDeviceId;
         } else {
-            midiOutputSelect.value = ''; // Standard: Kein Gerät
+            midiOutputSelect.value = '';
         }
 
-        // Listener für Geräteänderungen
         midiAccess.onstatechange = (event) => {
             const inputs = Array.from(midiAccess.inputs.values());
             const outputs = Array.from(midiAccess.outputs.values());
@@ -330,18 +328,16 @@ async function connectMidi() {
         const selectedMidiId = midiSelect.value;
         const inputs = Array.from(midiAccess.inputs.values());
 
-        // Alte Listener entfernen
         inputs.forEach(input => input.onmidimessage = null);
 
-        // Nur Listener setzen, wenn ein Gerät ausgewählt ist
         if (selectedMidiId) {
             const selectedInput = inputs.find(input => input.id === selectedMidiId);
             if (selectedInput) {
                 selectedInput.onmidimessage = (message) => {
                     const midiData = Array.from(message.data);
                     addLog(`MIDI lokal gesendet: [${midiData}]`);
-                    if (dataChannel && dataChannel.readyState === 'open') {
-                        dataChannel.send(JSON.stringify(midiData));
+                    if (midiChannel && midiChannel.readyState === 'open') {
+                        midiChannel.send(JSON.stringify(midiData));
                     } else {
                         addLog('MIDI-Kanal nicht offen, Junge!');
                     }
@@ -373,20 +369,41 @@ async function startCall() {
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    dataChannel = pc.createDataChannel('midiChannel');
-    setupDataChannel(dataChannel);
+
+    midiChannel = pc.createDataChannel('midiChannel');
+    setupMidiChannel(midiChannel);
+
+    fileChannel = pc.createDataChannel('fileChannel');
+    setupFileChannel(fileChannel);
+
     pc.ondatachannel = (event) => {
-        dataChannel = event.channel;
-        setupDataChannel(dataChannel);
+        if (event.channel.label === 'midiChannel') {
+            midiChannel = event.channel;
+            setupMidiChannel(midiChannel);
+        } else if (event.channel.label === 'fileChannel') {
+            fileChannel = event.channel;
+            setupFileChannel(fileChannel);
+        }
     };
     pc.onicecandidate = (event) => {
         if (event.candidate) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+            addLog('ICE-Kandidat gesendet, Junge!');
         }
     };
     pc.ontrack = (event) => {
         remoteVideo.srcObject = event.streams[0];
         addLog('Remote-Stream da, Junge!');
+    };
+    pc.oniceconnectionstatechange = () => {
+        addLog(`ICE-Verbindungsstatus: ${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            isFileSharingReady = true;
+            enableFileSharing();
+        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+            isFileSharingReady = false;
+            disableFileSharing();
+        }
     };
     try {
         const offer = await pc.createOffer();
@@ -398,14 +415,12 @@ async function startCall() {
     }
 }
 
-// DataChannel-Setup für MIDI (Empfang und Ausgabe)
-function setupDataChannel(channel) {
+// MIDI DataChannel-Setup
+function setupMidiChannel(channel) {
     channel.onopen = () => addLog('MIDI-Kanal offen, Junge!');
     channel.onmessage = (event) => {
         const midiData = JSON.parse(event.data);
         addLog(`MIDI vom anderen empfangen: [${midiData}]`);
-
-        // MIDI-Daten an ausgewähltes Ausgabegerät senden, wenn eines gewählt ist
         if (midiAccess && midiOutputSelect.value) {
             const selectedOutputId = midiOutputSelect.value;
             const outputs = Array.from(midiAccess.outputs.values());
@@ -420,8 +435,159 @@ function setupDataChannel(channel) {
             addLog('Kein MIDI-Ausgang ausgewählt, keine Signale werden ausgegeben.');
         }
     };
-    channel.onerror = (err) => addLog(`DataChannel Fehler: ${err}`);
+    channel.onerror = (err) => addLog(`MIDI-Kanal Fehler: ${err.message || err}`);
     channel.onclose = () => addLog('MIDI-Kanal zu, Junge!');
+}
+
+// Datei DataChannel-Setup
+let receivedChunks = [];
+let receivedFileInfo = null;
+
+function setupFileChannel(channel) {
+    channel.onopen = () => {
+        addLog('File-Kanal offen, Junge!');
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            isFileSharingReady = true;
+            enableFileSharing();
+        }
+    };
+    channel.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'fileInfo') {
+            receivedFileInfo = { fileName: data.fileName, fileType: data.fileType, totalChunks: data.totalChunks };
+            receivedChunks = [];
+            addLog(`Datei-Info empfangen: ${data.fileName}, ${data.totalChunks} Chunks`);
+        } else if (data.type === 'chunk') {
+            receivedChunks.push(data.chunk);
+            addLog(`Chunk ${receivedChunks.length}/${receivedFileInfo.totalChunks} empfangen`);
+            if (receivedChunks.length === receivedFileInfo.totalChunks) {
+                const fileData = receivedChunks.join('');
+                addFileToList(receivedFileInfo.fileName, receivedFileInfo.fileType, fileData, false);
+                addLog(`Datei komplett empfangen: ${receivedFileInfo.fileName}`);
+                receivedChunks = [];
+                receivedFileInfo = null;
+            }
+        }
+    };
+    channel.onerror = (err) => {
+        addLog(`File-Kanal Fehler: ${err.message || err}`);
+        isFileSharingReady = false;
+        disableFileSharing();
+    };
+    channel.onclose = () => {
+        addLog('File-Kanal zu, Junge!');
+        isFileSharingReady = false;
+        disableFileSharing();
+    };
+}
+
+// Filesharing aktivieren/deaktivieren
+function enableFileSharing() {
+    fileList.style.backgroundColor = '#f9f9f9';
+    fileList.style.opacity = '1';
+    fileList.style.pointerEvents = 'auto';
+    fileList.querySelector('p').textContent = 'Dateien hierher ziehen oder fallen lassen';
+    addLog('Filesharing aktiviert, Junge!');
+}
+
+function disableFileSharing() {
+    fileList.style.backgroundColor = '#e0e0e0';
+    fileList.style.opacity = '0.5';
+    fileList.style.pointerEvents = 'none';
+    fileList.querySelector('p').textContent = 'Filesharing nicht verfügbar - Verbindung erforderlich';
+    addLog('Filesharing deaktiviert, Junge!');
+}
+
+// Drag-and-Drop-Handler
+function handleDragOver(event) {
+    event.preventDefault();
+    if (isFileSharingReady) {
+        fileList.classList.add('dragover');
+    }
+}
+
+function handleDragLeave(event) {
+    event.preventDefault();
+    fileList.classList.remove('dragover');
+}
+
+async function handleDrop(event) {
+    event.preventDefault();
+    fileList.classList.remove('dragover');
+    if (!isFileSharingReady) {
+        addLog('Keine Verbindung, Datei kann nicht gesendet werden, Junge!');
+        return;
+    }
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const fileData = reader.result.split(',')[1];
+            const fileInfo = { fileName: file.name, fileType: file.type, totalChunks: Math.ceil(fileData.length / CHUNK_SIZE) };
+
+            fileChannel.send(JSON.stringify({ type: 'fileInfo', ...fileInfo }));
+            addLog(`Datei-Info gesendet: ${file.name}, ${fileInfo.totalChunks} Chunks`);
+
+            for (let i = 0; i < fileData.length; i += CHUNK_SIZE) {
+                const chunk = fileData.slice(i, i + CHUNK_SIZE);
+                fileChannel.send(JSON.stringify({ type: 'chunk', chunk }));
+                addLog(`Chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${fileInfo.totalChunks} gesendet`);
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+
+            addFileToList(file.name, file.type, fileData, true);
+            addLog(`Datei gesendet: ${file.name}`);
+        };
+        reader.onerror = () => addLog('Fehler beim Lesen der Datei, Junge!');
+        reader.readAsDataURL(file);
+    }
+}
+
+// Datei zur Liste hinzufügen
+function addFileToList(fileName, fileType, fileData, isSent) {
+    const fileItem = document.createElement('div');
+    fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
+
+    const fileLink = document.createElement('a');
+    fileLink.href = '#'; // Platzhalter, wird durch JS ersetzt
+    fileLink.textContent = `${fileName} (${isSent ? 'Gesendet' : 'Empfangen'})`;
+    fileLink.style.color = isSent ? '#155724' : '#004085'; // Grün für gesendet, Blau für empfangen
+    fileLink.style.textDecoration = 'underline';
+    fileLink.onclick = (e) => {
+        e.preventDefault();
+        handleFileOpen(fileName, fileType, fileData);
+    };
+
+    fileItem.appendChild(fileLink);
+    fileList.appendChild(fileItem);
+}
+
+// Datei öffnen/herunterladen
+function handleFileOpen(fileName, fileType, fileData) {
+    const blob = base64ToBlob(fileData, fileType);
+    const url = URL.createObjectURL(blob);
+
+    if (fileType.startsWith('image/') || fileType === 'application/pdf' || fileType.startsWith('text/')) {
+        window.open(url, '_blank');
+        addLog(`Datei geöffnet: ${fileName}`);
+    } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        addLog(`Datei heruntergeladen: ${fileName}`);
+    }
+}
+
+// Base64 zu Blob konvertieren
+function base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
 }
 
 // Signaling-Nachrichten handlen
@@ -472,6 +638,7 @@ async function init() {
     }
     adjustMicVolume();
     await connectMidi();
+    disableFileSharing();
 }
 
 init();
