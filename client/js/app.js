@@ -4,12 +4,15 @@ const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log');
 const chat = document.getElementById('chat');
 const messageInput = document.getElementById('messageInput');
-const videoSelect = document.getElementById('videoSelect'); // Neuer Video-Dropdown
-const audioSelect = document.getElementById('audioSelect'); // Neuer Audio-Dropdown
+const videoSelect = document.getElementById('videoSelect');
+const audioSelect = document.getElementById('audioSelect');
+const micVolume = document.getElementById('micVolume');
 let pc;
 let dataChannel;
 let localStream;
 let ws;
+let audioContext;
+let gainNode;
 
 // Logging-Funktion
 function addLog(msg) {
@@ -38,6 +41,27 @@ function initWebSocket() {
     ws.onclose = () => addLog('WebSocket zu, Junge!');
 }
 
+// Einstellungen im localStorage speichern
+function saveSettings() {
+    const settings = {
+        videoDeviceId: videoSelect.value,
+        audioDeviceId: audioSelect.value,
+        micVolume: micVolume.value
+    };
+    localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
+    addLog('Einstellungen gespeichert, Junge!');
+}
+
+// Einstellungen aus localStorage laden
+function loadSettings() {
+    const savedSettings = localStorage.getItem('midiCamDiggaSettings');
+    if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        return settings;
+    }
+    return null;
+}
+
 // Geräte auflisten und Dropdowns befüllen
 async function populateDeviceOptions() {
     try {
@@ -52,6 +76,20 @@ async function populateDeviceOptions() {
             `<option value="${device.deviceId}">${device.label || 'Mikrofon ' + device.deviceId.slice(0, 5)}</option>`
         ).join('');
 
+        // Gespeicherte Werte setzen
+        const settings = loadSettings();
+        if (settings && settings.videoDeviceId && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
+            videoSelect.value = settings.videoDeviceId;
+        } else {
+            videoSelect.value = videoDevices[0]?.deviceId || '';
+        }
+        if (settings && settings.audioDeviceId && audioDevices.some(d => d.deviceId === settings.audioDeviceId)) {
+            audioSelect.value = settings.audioDeviceId;
+        } else {
+            audioSelect.value = audioDevices[0]?.deviceId || '';
+        }
+        micVolume.value = settings?.micVolume || '1';
+
         addLog('Geräte geladen, Junge!');
     } catch (err) {
         addLog(`Fehler beim Laden der Geräte: ${err}`);
@@ -61,14 +99,35 @@ async function populateDeviceOptions() {
 // Webcam und Audio starten
 async function startMedia() {
     try {
-        const videoId = videoSelect.value || true; // Standard: erste Kamera
-        const audioId = audioSelect.value || true; // Standard: erstes Mikrofon
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: videoId === 'true' ? true : { deviceId: { exact: videoId } },
-            audio: audioId === 'true' ? true : { deviceId: { exact: audioId } }
-        });
+        const videoId = videoSelect.value || true;
+        const audioId = audioSelect.value || true;
+        const constraints = {
+            video: videoId && videoId !== 'true' ? { deviceId: { exact: videoId } } : true,
+            audio: audioId && audioId !== 'true' ? { deviceId: { exact: audioId } } : true
+        };
+        addLog(`Starte Media mit Constraints: ${JSON.stringify(constraints)}`);
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
         localVideo.srcObject = localStream;
+
+        // AudioContext für Lautstärkeregelung
+        if (localStream.getAudioTracks().length > 0) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(localStream);
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = parseFloat(micVolume.value);
+            source.connect(gainNode);
+            const destination = audioContext.createMediaStreamDestination();
+            gainNode.connect(destination);
+
+            // Neuen Stream mit Video und angepasstem Audio erstellen
+            const videoTracks = localStream.getVideoTracks();
+            const audioTrack = destination.stream.getAudioTracks()[0];
+            localStream = new MediaStream([...videoTracks, audioTrack]);
+            localVideo.srcObject = localStream;
+        }
+
         addLog('Media gestartet, Junge!');
+        saveSettings();
         return true;
     } catch (err) {
         addLog(`Fehler bei Media: ${err}`);
@@ -79,16 +138,36 @@ async function startMedia() {
 // Media-Stream umschalten
 async function switchMedia() {
     if (localStream) {
-        localStream.getTracks().forEach(track => track.stop()); // Alte Tracks stoppen
+        localStream.getTracks().forEach(track => track.stop());
+        if (audioContext) audioContext.close();
     }
     try {
         const videoId = videoSelect.value;
         const audioId = audioSelect.value;
-        localStream = await navigator.mediaDevices.getUserMedia({
+        const constraints = {
             video: videoId ? { deviceId: { exact: videoId } } : false,
             audio: audioId ? { deviceId: { exact: audioId } } : false
-        });
+        };
+        addLog(`Umschalten mit Constraints: ${JSON.stringify(constraints)}`);
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
         localVideo.srcObject = localStream;
+
+        // AudioContext für Lautstärkeregelung
+        if (localStream.getAudioTracks().length > 0) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(localStream);
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = parseFloat(micVolume.value);
+            source.connect(gainNode);
+            const destination = audioContext.createMediaStreamDestination();
+            gainNode.connect(destination);
+
+            // Neuen Stream mit Video und angepasstem Audio erstellen
+            const videoTracks = localStream.getVideoTracks();
+            const audioTrack = destination.stream.getAudioTracks()[0];
+            localStream = new MediaStream([...videoTracks, audioTrack]);
+            localVideo.srcObject = localStream;
+        }
 
         // Tracks in bestehender PeerConnection aktualisieren
         if (pc) {
@@ -104,8 +183,18 @@ async function switchMedia() {
             });
         }
         addLog('Media umgeschaltet, Junge!');
+        saveSettings();
     } catch (err) {
         addLog(`Fehler beim Umschalten: ${err}`);
+    }
+}
+
+// Mikrofon-Lautstärke anpassen
+function adjustMicVolume() {
+    if (gainNode) {
+        gainNode.gain.value = parseFloat(micVolume.value);
+        addLog(`Mikrofon-Lautstärke auf ${micVolume.value} gesetzt, Junge!`);
+        saveSettings();
     }
 }
 
@@ -220,11 +309,12 @@ function sendChatMessage() {
 // Initialisierung
 async function init() {
     initWebSocket();
-    await populateDeviceOptions(); // Geräte laden vor Media-Start
+    await populateDeviceOptions();
     const mediaReady = await startMedia();
     if (!mediaReady) {
         addLog('Media-Setup fehlgeschlagen, Junge! Check mal Kamera/Mikro.');
     }
+    adjustMicVolume();
 }
 
 init();
