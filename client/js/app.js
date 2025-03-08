@@ -13,6 +13,8 @@ let localStream;
 let ws;
 let audioContext;
 let gainNode;
+let currentVideoId = ''; // Aktuelle Video-ID speichern
+let currentAudioId = ''; // Aktuelle Audio-ID speichern
 
 // Logging-Funktion
 function addLog(msg) {
@@ -76,7 +78,6 @@ async function populateDeviceOptions() {
             `<option value="${device.deviceId}">${device.label || 'Mikrofon ' + device.deviceId.slice(0, 5)}</option>`
         ).join('');
 
-        // Gespeicherte Werte setzen
         const settings = loadSettings();
         if (settings && settings.videoDeviceId && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
             videoSelect.value = settings.videoDeviceId;
@@ -89,6 +90,9 @@ async function populateDeviceOptions() {
             audioSelect.value = audioDevices[0]?.deviceId || '';
         }
         micVolume.value = settings?.micVolume || '1';
+
+        currentVideoId = videoSelect.value;
+        currentAudioId = audioSelect.value;
 
         addLog('Geräte geladen, Junge!');
     } catch (err) {
@@ -109,7 +113,6 @@ async function startMedia() {
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         localVideo.srcObject = localStream;
 
-        // AudioContext für Lautstärkeregelung
         if (localStream.getAudioTracks().length > 0) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             const source = audioContext.createMediaStreamSource(localStream);
@@ -119,12 +122,14 @@ async function startMedia() {
             const destination = audioContext.createMediaStreamDestination();
             gainNode.connect(destination);
 
-            // Neuen Stream mit Video und angepasstem Audio erstellen
             const videoTracks = localStream.getVideoTracks();
             const audioTrack = destination.stream.getAudioTracks()[0];
             localStream = new MediaStream([...videoTracks, audioTrack]);
             localVideo.srcObject = localStream;
         }
+
+        currentVideoId = videoSelect.value;
+        currentAudioId = audioSelect.value;
 
         addLog('Media gestartet, Junge!');
         saveSettings();
@@ -136,37 +141,91 @@ async function startMedia() {
 }
 
 // Media-Stream umschalten
+// Media-Stream umschalten
 async function switchMedia() {
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        if (audioContext) audioContext.close();
-    }
-    try {
-        const videoId = videoSelect.value;
-        const audioId = audioSelect.value;
-        const constraints = {
-            video: videoId ? { deviceId: { exact: videoId } } : false,
-            audio: audioId ? { deviceId: { exact: audioId } } : false
-        };
-        addLog(`Umschalten mit Constraints: ${JSON.stringify(constraints)}`);
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        localVideo.srcObject = localStream;
+    const newVideoId = videoSelect.value;
+    const newAudioId = audioSelect.value;
+    const videoChanged = newVideoId !== currentVideoId;
+    const audioChanged = newAudioId !== currentAudioId;
 
-        // AudioContext für Lautstärkeregelung
-        if (localStream.getAudioTracks().length > 0) {
+    if (!videoChanged && !audioChanged) {
+        addLog('Keine Änderung, Junge!');
+        return;
+    }
+
+    try {
+        if (videoChanged && audioChanged) {
+            // Beides gewechselt: Komplett neu initialisieren
+            if (localStream) localStream.getTracks().forEach(track => track.stop());
+            if (audioContext) audioContext.close();
+            const constraints = {
+                video: newVideoId ? { deviceId: { exact: newVideoId } } : false,
+                audio: newAudioId ? { deviceId: { exact: newAudioId } } : false
+            };
+            addLog(`Beides umschalten mit: ${JSON.stringify(constraints)}`);
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            localVideo.srcObject = localStream;
+
+            if (localStream.getAudioTracks().length > 0) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(localStream);
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = parseFloat(micVolume.value);
+                source.connect(gainNode);
+                const destination = audioContext.createMediaStreamDestination();
+                gainNode.connect(destination);
+                const videoTracks = localStream.getVideoTracks();
+                const audioTrack = destination.stream.getAudioTracks()[0];
+                localStream = new MediaStream([...videoTracks, audioTrack]);
+                localVideo.srcObject = localStream;
+            }
+        } else if (audioChanged) {
+            // Nur Audio gewechselt: Video beibehalten, Audio aktualisieren
+            const audioConstraints = { audio: newAudioId ? { deviceId: { exact: newAudioId } } : false };
+            addLog(`Nur Audio umschalten mit: ${JSON.stringify(audioConstraints)}`);
+            const audioStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+            const newAudioTrack = audioStream.getAudioTracks()[0];
+
+            // Bestehenden Audio-Track im Stream ersetzen
+            if (localStream && localStream.getAudioTracks().length > 0) {
+                const oldAudioTrack = localStream.getAudioTracks()[0];
+                localStream.removeTrack(oldAudioTrack);
+                oldAudioTrack.stop();
+            }
+            localStream.addTrack(newAudioTrack);
+
+            // AudioContext aktualisieren, ohne ihn neu zu erstellen
+            if (audioContext) {
+                audioContext.close();
+            }
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaStreamSource(localStream);
+            const source = audioContext.createMediaStreamSource(new MediaStream([newAudioTrack]));
             gainNode = audioContext.createGain();
             gainNode.gain.value = parseFloat(micVolume.value);
             source.connect(gainNode);
             const destination = audioContext.createMediaStreamDestination();
             gainNode.connect(destination);
+            const adjustedAudioTrack = destination.stream.getAudioTracks()[0];
 
-            // Neuen Stream mit Video und angepasstem Audio erstellen
-            const videoTracks = localStream.getVideoTracks();
-            const audioTrack = destination.stream.getAudioTracks()[0];
-            localStream = new MediaStream([...videoTracks, audioTrack]);
-            localVideo.srcObject = localStream;
+            // Audio-Track im Stream erneut ersetzen
+            localStream.removeTrack(newAudioTrack);
+            localStream.addTrack(adjustedAudioTrack);
+
+            // Keine Neuzuweisung von localVideo.srcObject nötig!
+        } else if (videoChanged) {
+            // Nur Video gewechselt: Alten Audio-Track beibehalten
+            if (localStream && localStream.getVideoTracks().length > 0) {
+                localStream.getVideoTracks().forEach(track => track.stop());
+            }
+            const videoConstraints = { video: newVideoId ? { deviceId: { exact: newVideoId } } : false };
+            addLog(`Nur Video umschalten mit: ${JSON.stringify(videoConstraints)}`);
+            const videoStream = await navigator.mediaDevices.getUserMedia(videoConstraints);
+            const videoTrack = videoStream.getVideoTracks()[0];
+            if (localStream && localStream.getVideoTracks().length > 0) {
+                localStream.removeTrack(localStream.getVideoTracks()[0]);
+            }
+            localStream.addTrack(videoTrack);
+            localVideo.srcObject = localStream; // Hier nötig, da Video gewechselt wurde
         }
 
         // Tracks in bestehender PeerConnection aktualisieren
@@ -182,6 +241,9 @@ async function switchMedia() {
                 }
             });
         }
+
+        currentVideoId = newVideoId;
+        currentAudioId = newAudioId;
         addLog('Media umgeschaltet, Junge!');
         saveSettings();
     } catch (err) {
