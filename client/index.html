@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>MidiCamDigga</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         video { width: 300px; border: 1px solid #ccc; }
         #log { white-space: pre-wrap; }
@@ -20,13 +21,42 @@
         }
         .file-item {
             padding: 5px;
-            cursor: pointer;
+            display: flex;
+            align-items: center;
+            position: relative;
         }
         .file-item.sent {
-            background: #d4edda; /* Grünlich für gesendet */
+            background: #d4edda;
         }
         .file-item.received {
-            background: #cce5ff; /* Bläulich für empfangen */
+            background: #cce5ff;
+        }
+        .file-item a {
+            color: inherit;
+            text-decoration: underline;
+            margin-left: 5px;
+        }
+        .file-item .progress-container {
+            width: 100%;
+            background: #ddd;
+            height: 10px;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            display: none;
+        }
+        .file-item .progress-bar {
+            height: 100%;
+            background: #4caf50;
+            width: 0;
+            transition: width 0.3s;
+        }
+        .file-item .progress-text {
+            position: absolute;
+            top: -20px;
+            right: 5px;
+            font-size: 12px;
+            color: #333;
         }
     </style>
 </head>

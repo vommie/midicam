@@ -23,6 +23,11 @@ let midiAccess = null;
 let isFileSharingReady = false;
 const CHUNK_SIZE = 16384;
 
+// Audio-Objekte mit Pfad assets/
+const fileSentSound = new Audio('assets/file_sent.wav');
+const fileReceiveSound = new Audio('assets/file_receive.wav');
+const fileErrorSound = new Audio('assets/file_error.wav');
+
 // Logging-Funktion
 function addLog(msg) {
     log.textContent += `${msg}\n`;
@@ -442,6 +447,7 @@ function setupMidiChannel(channel) {
 // Datei DataChannel-Setup
 let receivedChunks = [];
 let receivedFileInfo = null;
+const activeReceives = new Map(); // Mehrere Dateien gleichzeitig handhaben
 
 function setupFileChannel(channel) {
     channel.onopen = () => {
@@ -452,25 +458,58 @@ function setupFileChannel(channel) {
         }
     };
     channel.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'fileInfo') {
-            receivedFileInfo = { fileName: data.fileName, fileType: data.fileType, totalChunks: data.totalChunks };
-            receivedChunks = [];
-            addLog(`Datei-Info empfangen: ${data.fileName}, ${data.totalChunks} Chunks`);
-        } else if (data.type === 'chunk') {
-            receivedChunks.push(data.chunk);
-            addLog(`Chunk ${receivedChunks.length}/${receivedFileInfo.totalChunks} empfangen`);
-            if (receivedChunks.length === receivedFileInfo.totalChunks) {
-                const fileData = receivedChunks.join('');
-                addFileToList(receivedFileInfo.fileName, receivedFileInfo.fileType, fileData, false);
-                addLog(`Datei komplett empfangen: ${receivedFileInfo.fileName}`);
-                receivedChunks = [];
-                receivedFileInfo = null;
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'fileInfo') {
+                const fileId = `${data.fileName}-${Date.now()}`; // Eindeutige ID pro Datei
+                const fileInfo = {
+                    fileName: data.fileName,
+                    fileType: data.fileType,
+                    totalChunks: data.totalChunks,
+                    totalBytes: data.totalBytes,
+                    chunks: [],
+                    fileItem: addFileToList(data.fileName, data.fileType, null, false, true),
+                    startTime: Date.now(),
+                    receivedBytes: 0
+                };
+                activeReceives.set(fileId, fileInfo);
+                addLog(`Datei-Info empfangen: ${data.fileName}, ${data.totalChunks} Chunks`);
+            } else if (data.type === 'chunk') {
+                for (const [fileId, fileInfo] of activeReceives) {
+                    if (fileInfo.chunks.length < fileInfo.totalChunks) {
+                        fileInfo.chunks.push(data.chunk);
+                        fileInfo.receivedBytes += data.chunk.length * 0.75;
+                        const elapsed = (Date.now() - fileInfo.startTime) / 1000;
+                        const speed = fileInfo.receivedBytes / elapsed / 1024 / 1024;
+                        updateFileProgress(fileInfo.fileItem, (fileInfo.chunks.length / fileInfo.totalChunks) * 100, speed);
+                        addLog(`Chunk ${fileInfo.chunks.length}/${fileInfo.totalChunks} empfangen für ${fileInfo.fileName}`);
+
+                        if (fileInfo.chunks.length === fileInfo.totalChunks) {
+                            const fileData = fileInfo.chunks.join('');
+                            finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
+                            addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
+                            fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+                            activeReceives.delete(fileId);
+                        }
+                        break; // Nur die erste passende Datei aktualisieren
+                    }
+                }
+            }
+        } catch (err) {
+            addLog(`Fehler beim Empfangen einer Datei: ${err}`);
+            fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+            // Betroffene Datei abbrechen
+            for (const [fileId, fileInfo] of activeReceives) {
+                if (fileInfo.chunks.length < fileInfo.totalChunks) {
+                    finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, null, false);
+                    activeReceives.delete(fileId);
+                    break;
+                }
             }
         }
     };
     channel.onerror = (err) => {
-        addLog(`File-Kanal Fehler: ${err.message || err}`);
+        addLog(`File-Kanal Fehler: ${err.message || err}`); // Kein Sound hier
         isFileSharingReady = false;
         disableFileSharing();
     };
@@ -524,43 +563,114 @@ async function handleDrop(event) {
         const reader = new FileReader();
         reader.onload = async () => {
             const fileData = reader.result.split(',')[1];
-            const fileInfo = { fileName: file.name, fileType: file.type, totalChunks: Math.ceil(fileData.length / CHUNK_SIZE) };
+            const fileInfo = {
+                fileName: file.name,
+                fileType: file.type,
+                totalChunks: Math.ceil(fileData.length / CHUNK_SIZE),
+                totalBytes: file.size
+            };
+            const fileItem = addFileToList(fileInfo.fileName, fileInfo.fileType, null, true, true);
+            const progressContainer = fileItem.querySelector('.progress-container');
+            const progressBar = fileItem.querySelector('.progress-bar'); // Direkt referenzieren
+            progressContainer.style.display = 'block';
+            const startTime = Date.now();
+            let sentBytes = 0;
+            let sentChunks = 0;
 
-            fileChannel.send(JSON.stringify({ type: 'fileInfo', ...fileInfo }));
-            addLog(`Datei-Info gesendet: ${file.name}, ${fileInfo.totalChunks} Chunks`);
+            try {
+                fileChannel.send(JSON.stringify({ type: 'fileInfo', ...fileInfo }));
+                addLog(`Datei-Info gesendet: ${file.name}, ${fileInfo.totalChunks} Chunks`);
 
-            for (let i = 0; i < fileData.length; i += CHUNK_SIZE) {
-                const chunk = fileData.slice(i, i + CHUNK_SIZE);
-                fileChannel.send(JSON.stringify({ type: 'chunk', chunk }));
-                addLog(`Chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${fileInfo.totalChunks} gesendet`);
-                await new Promise(resolve => setTimeout(resolve, 10));
+                for (let i = 0; i < fileData.length; i += CHUNK_SIZE) {
+                    const chunk = fileData.slice(i, i + CHUNK_SIZE);
+                    fileChannel.send(JSON.stringify({ type: 'chunk', chunk }));
+                    sentBytes += chunk.length * 0.75;
+                    sentChunks++;
+                    const percentage = (sentChunks / fileInfo.totalChunks) * 100;
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = sentBytes / elapsed / 1024 / 1024;
+                    addLog(`Sende Chunk ${sentChunks}/${fileInfo.totalChunks}, Fortschritt: ${percentage.toFixed(2)}%`);
+                    progressBar.style.width = `${Math.min(percentage, 100)}%`; // Direkt setzen
+                    updateFileProgress(fileItem, percentage, speed);
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+
+                finalizeFileTransfer(fileItem, fileInfo.fileName, fileInfo.fileType, fileData, true);
+                addLog(`Datei gesendet: ${file.name}`);
+                fileSentSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+            } catch (err) {
+                addLog(`Fehler beim Senden der Datei: ${err}`);
+                fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+                finalizeFileTransfer(fileItem, fileInfo.fileName, fileInfo.fileType, null, true);
             }
-
-            addFileToList(file.name, file.type, fileData, true);
-            addLog(`Datei gesendet: ${file.name}`);
         };
-        reader.onerror = () => addLog('Fehler beim Lesen der Datei, Junge!');
+        reader.onerror = () => {
+            addLog('Fehler beim Lesen der Datei, Junge!');
+            fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+            finalizeFileTransfer(fileItem, file.name, file.type, null, true);
+        };
         reader.readAsDataURL(file);
     }
 }
 
 // Datei zur Liste hinzufügen
-function addFileToList(fileName, fileType, fileData, isSent) {
+function addFileToList(fileName, fileType, fileData, isSent, showProgress = false) {
     const fileItem = document.createElement('div');
     fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
 
+    const icon = document.createElement('i');
+    icon.classList.add('fa', getFileIcon(fileType));
+    fileItem.appendChild(icon);
+
     const fileLink = document.createElement('a');
-    fileLink.href = '#'; // Platzhalter, wird durch JS ersetzt
+    fileLink.href = '#';
     fileLink.textContent = `${fileName} (${isSent ? 'Gesendet' : 'Empfangen'})`;
-    fileLink.style.color = isSent ? '#155724' : '#004085'; // Grün für gesendet, Blau für empfangen
+    fileLink.style.color = isSent ? '#155724' : '#004085';
     fileLink.style.textDecoration = 'underline';
     fileLink.onclick = (e) => {
         e.preventDefault();
-        handleFileOpen(fileName, fileType, fileData);
+        if (fileData) handleFileOpen(fileName, fileType, fileData);
     };
-
     fileItem.appendChild(fileLink);
+
+    if (showProgress) {
+        const progressContainer = document.createElement('div');
+        progressContainer.classList.add('progress-container');
+        const progressBar = document.createElement('div');
+        progressBar.classList.add('progress-bar');
+        progressContainer.appendChild(progressBar);
+        const progressText = document.createElement('span');
+        progressText.classList.add('progress-text');
+        progressText.textContent = '0% (0 MB/s)';
+        fileItem.appendChild(progressContainer);
+        fileItem.appendChild(progressText);
+    }
+
     fileList.appendChild(fileItem);
+    return fileItem;
+}
+
+// Fortschritt aktualisieren
+function updateFileProgress(fileItem, percentage, speed) {
+    const progressBar = fileItem.querySelector('.progress-bar');
+    const progressText = fileItem.querySelector('.progress-text');
+    progressBar.parentElement.style.display = 'block';
+    progressBar.style.width = `${Math.min(percentage, 100)}%`;
+    progressText.textContent = `${Math.round(percentage)}% (${speed.toFixed(2)} MB/s)`;
+    addLog(`Update Fortschritt: ${Math.round(percentage)}%`); // Debugging
+}
+
+// Dateiübertragung abschließen
+function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
+    const progressContainer = fileItem.querySelector('.progress-container');
+    const progressText = fileItem.querySelector('.progress-text');
+    if (progressContainer) progressContainer.style.display = 'none';
+    if (progressText) progressText.remove();
+    const fileLink = fileItem.querySelector('a');
+    fileLink.onclick = (e) => {
+        e.preventDefault();
+        if (fileData) handleFileOpen(fileName, fileType, fileData);
+    };
 }
 
 // Datei öffnen/herunterladen
@@ -588,6 +698,17 @@ function base64ToBlob(base64, mimeType) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+}
+
+// MIME-Type zu Font Awesome Icon
+function getFileIcon(fileType) {
+    if (fileType.startsWith('image/')) return 'fa-file-image';
+    if (fileType === 'application/pdf') return 'fa-file-pdf';
+    if (fileType.startsWith('text/')) return 'fa-file-alt';
+    if (fileType.startsWith('audio/')) return 'fa-file-audio';
+    if (fileType.startsWith('video/')) return 'fa-file-video';
+    if (fileType === 'application/zip' || fileType === 'application/x-rar-compressed') return 'fa-file-archive';
+    return 'fa-file'; // Standard-Icon
 }
 
 // Signaling-Nachrichten handlen
