@@ -363,28 +363,45 @@ async function connectMidi() {
 
 // WebRTC-Verbindung starten
 async function startConnection() {
+    // Sicherstellen, dass alte Verbindungen vollständig geschlossen sind
+    if (pc) {
+        pc.close();
+        pc = null;
+        addLog('Alte WebRTC-Verbindung geschlossen');
+    }
+    if (ws) {
+        ws.close();
+        ws = null;
+        addLog('Alter WebSocket geschlossen');
+    }
+
     if (!localStream) {
-        addLog('Media noch nicht bereit, Junge! Warte mal!');
-        return;
+        const mediaReady = await startMedia();
+        if (!mediaReady) {
+            addLog('Media-Setup fehlgeschlagen, Junge! Verbindung abgebrochen.');
+            resetConnectionUI();
+            return;
+        }
     }
 
     const serverIp = serverIpInput.value.trim();
     const serverPort = serverPortInput.value.trim();
     if (!serverIp || !serverPort) {
         addLog('IP oder Port fehlt, Junge! Gib mal was ein!');
+        resetConnectionUI();
         return;
     }
 
-    // Button und Eingaben deaktivieren, Feedback anzeigen
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
     startConnectionButton.innerHTML = 'Warte auf Gegenseite ... <img src="assets/throbber.gif" alt="Warten" class="throbber">';
     serverIpInput.disabled = true;
     serverPortInput.disabled = true;
 
-    // WebSocket-Verbindung zum Server
     ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
-    ws.onopen = () => addLog('WebSocket offen, Junge!');
+    ws.onopen = () => {
+        addLog('WebSocket offen, Junge!');
+    };
     ws.onerror = (err) => {
         addLog(`WebSocket Fehler: ${err.message || err}`);
         resetConnectionUI();
@@ -395,6 +412,16 @@ async function startConnection() {
     };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'error') {
+            addLog(`Server-Fehler: ${msg.message}`);
+            resetConnectionUI();
+            return;
+        }
+        if (msg.type === 'disconnected-by-peer') {
+            addLog('Verbindung von Peer getrennt, Junge!');
+            disconnect(); // Lokale Trennung auslösen
+            return;
+        }
         if (msg.type === 'offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(msg));
             const answer = await pc.createAnswer();
@@ -410,7 +437,6 @@ async function startConnection() {
         }
     };
 
-    // WebRTC-Verbindung
     pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
@@ -447,8 +473,9 @@ async function startConnection() {
         }
     };
     pc.ontrack = (event) => {
+        addLog('Remote-Stream empfangen, setze auf remoteVideo');
         remoteVideo.srcObject = event.streams[0];
-        addLog('Remote-Stream da, Junge!');
+        remoteVideo.play().catch(err => addLog(`Fehler beim Abspielen von remoteVideo: ${err}`));
     };
     pc.oniceconnectionstatechange = () => {
         addLog(`ICE-Verbindungsstatus: ${pc.iceConnectionState}`);
@@ -456,7 +483,6 @@ async function startConnection() {
             isFileSharingReady = true;
             enableFileSharing();
             connectMidi();
-            // Verbindung hergestellt: Button rot, Felder verstecken
             startConnectionButton.disabled = false;
             startConnectionButton.style.backgroundColor = '#ff4444';
             startConnectionButton.innerHTML = 'Verbindung trennen';
@@ -467,6 +493,8 @@ async function startConnection() {
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
+            remoteVideo.srcObject = null;
+            addLog('Remote-Video zurückgesetzt wegen ICE-Statusänderung');
             resetConnectionUI();
         }
     };
@@ -478,7 +506,7 @@ async function startConnection() {
         addLog('Offer gesendet, Junge!');
     } catch (err) {
         addLog(`Fehler bei Offer: ${err}`);
-        resetConnectionUI();
+        // resetConnectionUI();
     }
 
     saveSettings();
@@ -486,6 +514,10 @@ async function startConnection() {
 
 // Verbindung trennen
 function disconnect() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'disconnect-all' })); // Server anweisen, alle Clients zu trennen
+        addLog('Disconnect-All gesendet, Junge!');
+    }
     if (pc) {
         pc.close();
         pc = null;
@@ -496,6 +528,23 @@ function disconnect() {
         ws = null;
         addLog('WebSocket-Verbindung getrennt, Junge!');
     }
+    remoteVideo.srcObject = null;
+    remoteVideo.load();
+    addLog('remoteVideo zurückgesetzt und geladen');
+    if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+        gainNode = null;
+        addLog('AudioContext geschlossen, Junge!');
+    }
+    if (midiAccess) {
+        const inputs = Array.from(midiAccess.inputs.values());
+        inputs.forEach(input => input.onmidimessage = null);
+        addLog('MIDI-Handler zurückgesetzt, Junge!');
+    }
+    midiChannel = null;
+    fileChannel = null;
+    chatChannel = null;
     isFileSharingReady = false;
     disableFileSharing();
     resetConnectionUI();
@@ -783,23 +832,19 @@ function sendChatMessage() {
 
 // Event-Listener setzen
 function setEventListeners() {
-    // Chat
     const chatForm = document.querySelector('#chat-form');
     chatForm.addEventListener('submit', (e) => {
         e.preventDefault();
         sendChatMessage();
     });
 
-    // Midi
     document.querySelector('#midiSelect').addEventListener('change', () => connectMidi());
     document.querySelector('#midiOutputSelect').addEventListener('change', () => saveSettings());
 
-    // Devices
     document.querySelector('#videoSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#micVolume').addEventListener('input', () => adjustMicVolume());
 
-    // Verbindung starten/trennen
     startConnectionButton.addEventListener('click', () => {
         if (startConnectionButton.innerHTML.includes('Verbindung trennen')) {
             disconnect();
@@ -808,7 +853,6 @@ function setEventListeners() {
         }
     });
 
-    // Drag-and-Drop
     fileList.addEventListener('dragover', handleDragOver);
     fileList.addEventListener('dragleave', handleDragLeave);
     fileList.addEventListener('drop', handleDrop);
