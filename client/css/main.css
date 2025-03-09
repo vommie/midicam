@@ -27,7 +27,9 @@ main {
     grid-template-rows: 1fr auto;
     grid-auto-flow: row;
     grid-row-gap: 8px;
-    height: 100%;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
 }
 
 #cams {
@@ -51,9 +53,8 @@ main {
 }
 
 #cams {
-    position: relative;
     width: 100%;
-    height: 100vh; /* Beispielhöhe */
+    height: 100%;
 }
 
 #remoteVideo {
@@ -65,26 +66,24 @@ main {
 #localVideoWrapper {
     position: absolute;
     z-index: 1000;
-    cursor: move; /* Drag-Cursor für den gesamten Wrapper */
+    cursor: move;
 }
 
 #localVideo {
-    width: 100%; /* Füllt den Wrapper */
+    width: 100%;
     height: 100%;
-    border: 2px solid #fff;
     box-shadow: 0 0 10px rgba(0,0,0,0.3);
-    display: block; /* Entfernt unerwünschte Lücken */
+    display: block;
 }
 
 #resizeHandle {
     position: absolute;
     width: 15px;
     height: 15px;
-    background: #fff;
-    right: 0;
-    bottom: 0;
+    right: -2px;
+    bottom: -2px;
     cursor: nw-resize;
-    z-index: 1001; /* Über dem Video */
+    z-index: 1001;
 }
 
 #sidebar-right {
