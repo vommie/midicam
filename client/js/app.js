@@ -14,18 +14,21 @@ const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
+const serverIpInput = document.getElementById('serverIp');
+const serverPortInput = document.getElementById('serverPort');
 let pc;
 let midiChannel;
 let fileChannel;
+let chatChannel;
 let localStream;
-let ws;
 let audioContext;
 let gainNode;
 let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
 let isFileSharingReady = false;
-const CHUNK_SIZE = 16384;
+let ws; // WebSocket-Instanz
+const CHUNK_SIZE = 65536; // 64 KB für schnelleren Dateitransfer
 const pianos = new Pianos();
 
 // Audio-Objekte mit Pfad assets/
@@ -46,22 +49,6 @@ function addChatMessage(msg) {
     chat.scrollTop = chat.scrollHeight;
 }
 
-// WebSocket-Verbindung aufbauen
-function initWebSocket() {
-    ws = new WebSocket('ws://localhost:8080');
-    ws.onopen = () => addLog('WebSocket connected, Junge!');
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'chat') {
-            addChatMessage(`Anderer Digga: ${data.message}`);
-        } else {
-            handleSignaling(data);
-        }
-    };
-    ws.onerror = (err) => addLog(`WebSocket Fehler: ${err}`);
-    ws.onclose = () => addLog('WebSocket zu, Junge!');
-}
-
 // Einstellungen im localStorage speichern
 function saveSettings() {
     const settings = {
@@ -69,7 +56,9 @@ function saveSettings() {
         audioDeviceId: audioSelect.value,
         micVolume: micVolume.value,
         midiDeviceId: midiSelect.value,
-        midiOutputDeviceId: midiOutputSelect.value
+        midiOutputDeviceId: midiOutputSelect.value,
+        serverIp: serverIpInput.value,
+        serverPort: serverPortInput.value
     };
     localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
     addLog('Einstellungen gespeichert, Junge!');
@@ -79,9 +68,12 @@ function saveSettings() {
 function loadSettings() {
     const savedSettings = localStorage.getItem('midiCamDiggaSettings');
     if (savedSettings) {
-        return JSON.parse(savedSettings);
+        const settings = JSON.parse(savedSettings);
+        serverIpInput.value = settings.serverIp || 'localhost';
+        serverPortInput.value = settings.serverPort || '8080';
+        return settings;
     }
-    return null;
+    return { serverIp: 'localhost', serverPort: '8080' };
 }
 
 // Geräte auflisten und Dropdowns befüllen
@@ -330,7 +322,7 @@ function adjustMicVolume() {
     }
 }
 
-// MIDI-Zugriff und Senden
+// MIDI verbinden
 async function connectMidi() {
     if (!midiAccess) {
         addLog('MIDI-Zugriff nicht initialisiert, Junge! Warte mal.');
@@ -346,11 +338,11 @@ async function connectMidi() {
             const selectedInput = inputs.find(input => input.id === selectedMidiId);
             if (selectedInput) {
                 selectedInput.onmidimessage = (message) => {
-                    const midiData = Array.from(message.data);
+                    const midiData = new Uint8Array(message.data);
                     addLog(`MIDI lokal gesendet: [${midiData}]`);
                     pianos.getMIDIMessage(message, 'local');
                     if (midiChannel && midiChannel.readyState === 'open') {
-                        midiChannel.send(JSON.stringify(midiData));
+                        midiChannel.send(midiData.buffer); // Binär senden
                     } else {
                         addLog('MIDI-Kanal nicht offen, Junge!');
                     }
@@ -368,26 +360,59 @@ async function connectMidi() {
     }
 }
 
-// WebRTC-Verbindung aufbauen
-async function startCall() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        addLog('WebSocket nicht bereit, Junge!');
-        return;
-    }
+// WebRTC-Verbindung starten
+async function startConnection() {
     if (!localStream) {
         addLog('Media noch nicht bereit, Junge! Warte mal!');
         return;
     }
+
+    const serverIp = serverIpInput.value.trim();
+    const serverPort = serverPortInput.value.trim();
+    if (!serverIp || !serverPort) {
+        addLog('IP oder Port fehlt, Junge! Gib mal was ein!');
+        return;
+    }
+
+    // WebSocket-Verbindung zum Server
+    ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+    ws.onopen = () => addLog('WebSocket offen, Junge!');
+    ws.onerror = (err) => addLog(`WebSocket Fehler: ${err.message || err}`);
+    ws.onclose = () => addLog('WebSocket zu, Junge!');
+    ws.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(msg));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
+            addLog('Answer gesendet, Junge!');
+        } else if (msg.type === 'answer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(msg));
+            addLog('Answer empfangen, Junge!');
+        } else if (msg.type === 'candidate') {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+            addLog('ICE-Kandidat empfangen, Junge!');
+        }
+    };
+
+    // WebRTC-Verbindung
     pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    midiChannel = pc.createDataChannel('midiChannel');
+    midiChannel = pc.createDataChannel('midiChannel', {
+        ordered: false, // Keine Reihenfolge garantieren
+        maxRetransmits: 0 // Keine Wiederholungen, minimiert Latenz
+    });
     setupMidiChannel(midiChannel);
 
     fileChannel = pc.createDataChannel('fileChannel');
     setupFileChannel(fileChannel);
+
+    chatChannel = pc.createDataChannel('chatChannel', { ordered: true });
+    setupChatChannel(chatChannel);
 
     pc.ondatachannel = (event) => {
         if (event.channel.label === 'midiChannel') {
@@ -396,10 +421,13 @@ async function startCall() {
         } else if (event.channel.label === 'fileChannel') {
             fileChannel = event.channel;
             setupFileChannel(fileChannel);
+        } else if (event.channel.label === 'chatChannel') {
+            chatChannel = event.channel;
+            setupChatChannel(chatChannel);
         }
     };
     pc.onicecandidate = (event) => {
-        if (event.candidate) {
+        if (event.candidate && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
             addLog('ICE-Kandidat gesendet, Junge!');
         }
@@ -413,28 +441,33 @@ async function startCall() {
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             isFileSharingReady = true;
             enableFileSharing();
+            connectMidi(); // MIDI nach Verbindung initialisieren
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
         }
     };
+
     try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+        ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
         addLog('Offer gesendet, Junge!');
     } catch (err) {
         addLog(`Fehler bei Offer: ${err}`);
     }
+
+    saveSettings();
 }
 
 // MIDI DataChannel-Setup
 function setupMidiChannel(channel) {
+    channel.binaryType = 'arraybuffer';
     channel.onopen = () => addLog('MIDI-Kanal offen, Junge!');
     channel.onmessage = (event) => {
-        const midiData = JSON.parse(event.data);
+        const midiData = new Uint8Array(event.data);
         addLog(`MIDI vom anderen empfangen: [${midiData}]`);
-        pianos.getMIDIMessage({data: midiData}, 'remote');
+        pianos.getMIDIMessage({ data: midiData }, 'remote');
         if (midiAccess && midiOutputSelect.value) {
             const selectedOutputId = midiOutputSelect.value;
             const outputs = Array.from(midiAccess.outputs.values());
@@ -442,83 +475,73 @@ function setupMidiChannel(channel) {
             if (selectedOutput) {
                 selectedOutput.send(midiData);
                 addLog(`MIDI an ${selectedOutput.name} gesendet, Junge!`);
-            } else {
-                addLog('Ausgewähltes MIDI-Ausgangsgerät nicht verfügbar, Junge!');
             }
-        } else {
-            addLog('Kein MIDI-Ausgang ausgewählt, keine Signale werden ausgegeben.');
         }
     };
     channel.onerror = (err) => addLog(`MIDI-Kanal Fehler: ${err.message || err}`);
     channel.onclose = () => addLog('MIDI-Kanal zu, Junge!');
 }
 
+// Chat DataChannel-Setup
+function setupChatChannel(channel) {
+    channel.onopen = () => addLog('Chat-Kanal offen, Junge!');
+    channel.onmessage = (event) => {
+        const message = event.data;
+        addChatMessage(`Anderer Digga: ${message}`);
+    };
+    channel.onerror = (err) => addLog(`Chat-Kanal Fehler: ${err.message || err}`);
+    channel.onclose = () => addLog('Chat-Kanal zu, Junge!');
+}
+
 // Datei DataChannel-Setup
-let receivedChunks = [];
-let receivedFileInfo = null;
-const activeReceives = new Map(); // Mehrere Dateien gleichzeitig handhaben
+let activeReceives = new Map();
 
 function setupFileChannel(channel) {
+    channel.binaryType = 'arraybuffer';
     channel.onopen = () => {
         addLog('File-Kanal offen, Junge!');
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-            isFileSharingReady = true;
-            enableFileSharing();
-        }
+        isFileSharingReady = true;
+        enableFileSharing();
     };
     channel.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'fileInfo') {
-                const fileId = `${data.fileName}-${Date.now()}`; // Eindeutige ID pro Datei
-                const fileInfo = {
-                    fileName: data.fileName,
-                    fileType: data.fileType,
-                    totalChunks: data.totalChunks,
-                    totalBytes: data.totalBytes,
-                    chunks: [],
-                    fileItem: addFileToList(data.fileName, data.fileType, null, false, true),
-                    startTime: Date.now(),
-                    receivedBytes: 0
-                };
-                activeReceives.set(fileId, fileInfo);
-                addLog(`Datei-Info empfangen: ${data.fileName}, ${data.totalChunks} Chunks`);
-            } else if (data.type === 'chunk') {
-                for (const [fileId, fileInfo] of activeReceives) {
-                    if (fileInfo.chunks.length < fileInfo.totalChunks) {
-                        fileInfo.chunks.push(data.chunk);
-                        fileInfo.receivedBytes += data.chunk.length * 0.75;
-                        const elapsed = (Date.now() - fileInfo.startTime) / 1000;
-                        const speed = fileInfo.receivedBytes / elapsed / 1024 / 1024;
-                        updateFileProgress(fileInfo.fileItem, (fileInfo.chunks.length / fileInfo.totalChunks) * 100, speed);
-                        addLog(`Chunk ${fileInfo.chunks.length}/${fileInfo.totalChunks} empfangen für ${fileInfo.fileName}`);
-
-                        if (fileInfo.chunks.length === fileInfo.totalChunks) {
-                            const fileData = fileInfo.chunks.join('');
-                            finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                            addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
-                            fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
-                            activeReceives.delete(fileId);
-                        }
-                        break; // Nur die erste passende Datei aktualisieren
-                    }
-                }
-            }
-        } catch (err) {
-            addLog(`Fehler beim Empfangen einer Datei: ${err}`);
-            fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
-            // Betroffene Datei abbrechen
+        const data = new Uint8Array(event.data);
+        const header = new TextDecoder().decode(data.slice(0, 1));
+        if (header === 'I') {
+            const info = JSON.parse(new TextDecoder().decode(data.slice(1)));
+            const fileId = `${info.fileName}-${Date.now()}`;
+            const fileInfo = {
+                fileName: info.fileName,
+                fileType: info.fileType,
+                totalBytes: info.totalBytes,
+                chunks: [],
+                fileItem: addFileToList(info.fileName, info.fileType, null, false, true),
+                startTime: Date.now(),
+                receivedBytes: 0
+            };
+            activeReceives.set(fileId, fileInfo);
+            addLog(`Datei-Info empfangen: ${info.fileName}, ${info.totalBytes} Bytes`);
+        } else if (header === 'C') {
             for (const [fileId, fileInfo] of activeReceives) {
-                if (fileInfo.chunks.length < fileInfo.totalChunks) {
-                    finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, null, false);
+                const chunk = data.slice(1);
+                fileInfo.chunks.push(chunk);
+                fileInfo.receivedBytes += chunk.byteLength;
+                const elapsed = (Date.now() - fileInfo.startTime) / 1000;
+                const speed = fileInfo.receivedBytes / elapsed / 1024 / 1024;
+                const percentage = (fileInfo.receivedBytes / fileInfo.totalBytes) * 100;
+                updateFileProgress(fileInfo.fileItem, percentage, speed);
+                if (fileInfo.receivedBytes === fileInfo.totalBytes) {
+                    const fileData = new Blob(fileInfo.chunks);
+                    finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
+                    addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
+                    fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
                     activeReceives.delete(fileId);
-                    break;
                 }
+                break;
             }
         }
     };
     channel.onerror = (err) => {
-        addLog(`File-Kanal Fehler: ${err.message || err}`); // Kein Sound hier
+        addLog(`File-Kanal Fehler: ${err.message || err}`);
         isFileSharingReady = false;
         disableFileSharing();
     };
@@ -569,56 +592,38 @@ async function handleDrop(event) {
     const files = event.dataTransfer.files;
     if (files.length > 0) {
         const file = files[0];
-        const reader = new FileReader();
-        reader.onload = async () => {
-            const fileData = reader.result.split(',')[1];
-            const fileInfo = {
-                fileName: file.name,
-                fileType: file.type,
-                totalChunks: Math.ceil(fileData.length / CHUNK_SIZE),
-                totalBytes: file.size
-            };
-            const fileItem = addFileToList(fileInfo.fileName, fileInfo.fileType, null, true, true);
-            const progressContainer = fileItem.querySelector('.progress-container');
-            const progressBar = fileItem.querySelector('.progress-bar'); // Direkt referenzieren
-            progressContainer.style.display = 'block';
-            const startTime = Date.now();
-            let sentBytes = 0;
-            let sentChunks = 0;
+        const fileItem = addFileToList(file.name, file.type, null, true, true);
+        const progressBar = fileItem.querySelector('.progress-bar');
+        const startTime = Date.now();
+        let sentBytes = 0;
 
-            try {
-                fileChannel.send(JSON.stringify({ type: 'fileInfo', ...fileInfo }));
-                addLog(`Datei-Info gesendet: ${file.name}, ${fileInfo.totalChunks} Chunks`);
-
-                for (let i = 0; i < fileData.length; i += CHUNK_SIZE) {
-                    const chunk = fileData.slice(i, i + CHUNK_SIZE);
-                    fileChannel.send(JSON.stringify({ type: 'chunk', chunk }));
-                    sentBytes += chunk.length * 0.75;
-                    sentChunks++;
-                    const percentage = (sentChunks / fileInfo.totalChunks) * 100;
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = sentBytes / elapsed / 1024 / 1024;
-                    addLog(`Sende Chunk ${sentChunks}/${fileInfo.totalChunks}, Fortschritt: ${percentage.toFixed(2)}%`);
-                    progressBar.style.width = `${Math.min(percentage, 100)}%`; // Direkt setzen
-                    updateFileProgress(fileItem, percentage, speed);
-                    await new Promise(resolve => setTimeout(resolve, 10));
-                }
-
-                finalizeFileTransfer(fileItem, fileInfo.fileName, fileInfo.fileType, fileData, true);
-                addLog(`Datei gesendet: ${file.name}`);
-                fileSentSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
-            } catch (err) {
-                addLog(`Fehler beim Senden der Datei: ${err}`);
-                fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
-                finalizeFileTransfer(fileItem, fileInfo.fileName, fileInfo.fileType, null, true);
-            }
+        const fileInfo = {
+            fileName: file.name,
+            fileType: file.type,
+            totalBytes: file.size
         };
-        reader.onerror = () => {
-            addLog('Fehler beim Lesen der Datei, Junge!');
-            fileErrorSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
-            finalizeFileTransfer(fileItem, file.name, file.type, null, true);
-        };
-        reader.readAsDataURL(file);
+        const infoData = new TextEncoder().encode('I' + JSON.stringify(fileInfo));
+        fileChannel.send(infoData);
+        addLog(`Datei-Info gesendet: ${file.name}, ${file.size} Bytes`);
+
+        const arrayBuffer = await file.arrayBuffer();
+        for (let i = 0; i < file.size; i += CHUNK_SIZE) {
+            const chunk = arrayBuffer.slice(i, Math.min(i + CHUNK_SIZE, file.size));
+            const chunkData = new Uint8Array(chunk.byteLength + 1);
+            chunkData[0] = 'C'.charCodeAt(0);
+            chunkData.set(new Uint8Array(chunk), 1);
+            fileChannel.send(chunkData);
+            sentBytes += chunk.byteLength;
+            const percentage = (sentBytes / file.size) * 100;
+            const elapsed = (Date.now() - startTime) / 1000;
+            const speed = sentBytes / elapsed / 1024 / 1024;
+            progressBar.style.width = `${Math.min(percentage, 100)}%`;
+            updateFileProgress(fileItem, percentage, speed);
+        }
+
+        finalizeFileTransfer(fileItem, file.name, file.type, arrayBuffer, true);
+        addLog(`Datei gesendet: ${file.name}`);
+        fileSentSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
     }
 }
 
@@ -666,7 +671,7 @@ function updateFileProgress(fileItem, percentage, speed) {
     progressBar.parentElement.style.display = 'block';
     progressBar.style.width = `${Math.min(percentage, 100)}%`;
     progressText.textContent = `${Math.round(percentage)}% (${speed.toFixed(2)} MB/s)`;
-    addLog(`Update Fortschritt: ${Math.round(percentage)}%`); // Debugging
+    addLog(`Update Fortschritt: ${Math.round(percentage)}%`);
 }
 
 // Dateiübertragung abschließen
@@ -678,15 +683,15 @@ function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
     const fileLink = fileItem.querySelector('a');
     fileLink.onclick = (e) => {
         e.preventDefault();
-        if (fileData) handleFileOpen(fileName, fileType, fileData);
+        if (fileData) {
+            const url = URL.createObjectURL(new Blob([fileData], { type: fileType }));
+            handleFileOpen(fileName, fileType, url);
+        }
     };
 }
 
 // Datei öffnen/herunterladen
-function handleFileOpen(fileName, fileType, fileData) {
-    const blob = base64ToBlob(fileData, fileType);
-    const url = URL.createObjectURL(blob);
-
+function handleFileOpen(fileName, fileType, url) {
     if (fileType.startsWith('image/') || fileType === 'application/pdf' || fileType.startsWith('text/')) {
         window.open(url, '_blank');
         addLog(`Datei geöffnet: ${fileName}`);
@@ -699,16 +704,6 @@ function handleFileOpen(fileName, fileType, fileData) {
     }
 }
 
-// Base64 zu Blob konvertieren
-function base64ToBlob(base64, mimeType) {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-}
-
 // MIME-Type zu Font Awesome Icon
 function getFileIcon(fileType) {
     if (fileType.startsWith('image/')) return 'fa-file-image';
@@ -717,73 +712,50 @@ function getFileIcon(fileType) {
     if (fileType.startsWith('audio/')) return 'fa-file-audio';
     if (fileType.startsWith('video/')) return 'fa-file-video';
     if (fileType === 'application/zip' || fileType === 'application/x-rar-compressed') return 'fa-file-archive';
-    return 'fa-file'; // Standard-Icon
-}
-
-// Signaling-Nachrichten handlen
-async function handleSignaling(message) {
-    if (!pc) {
-        addLog('Kein PeerConnection, Junge! Starte erst den Call.');
-        return;
-    }
-    try {
-        if (message.type === 'offer') {
-            await pc.setRemoteDescription({ type: 'offer', sdp: message.sdp });
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
-            addLog('Answer gesendet, Junge!');
-        } else if (message.type === 'answer') {
-            await pc.setRemoteDescription({ type: 'answer', sdp: message.sdp });
-            addLog('Answer empfangen, Junge!');
-        } else if (message.type === 'candidate') {
-            await pc.addIceCandidate(message.candidate);
-            addLog('ICE-Kandidat hinzugefügt!');
-        }
-    } catch (err) {
-        addLog(`Signaling-Fehler: ${err}`);
-    }
+    return 'fa-file';
 }
 
 // Chat-Nachricht senden
 function sendChatMessage() {
     const message = messageInput.value.trim();
-    if (message && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'chat', message: message }));
+    if (message && chatChannel && chatChannel.readyState === 'open') {
+        chatChannel.send(message);
         addChatMessage(`Du: ${message}`);
         messageInput.value = '';
     } else {
-        addLog('Chat-Nachricht nicht gesendet: WebSocket nicht offen oder leer!');
+        addLog('Chat-Nachricht nicht gesendet: Kanal nicht offen oder leer!');
     }
 }
 
+// Event-Listener setzen
 function setEventListeners() {
     // Chat
-    document.querySelector('#messageSubmit').addEventListener('click', e=>{sendChatMessage();});
-    document.querySelector('#messageInput').addEventListener('keydown', e=>{
-        if(e.key === 'Enter') {
-            e.preventDefault();
-            sendChatMessage();
-          }
+    const chatForm = document.querySelector('#chat-form');
+    chatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        sendChatMessage();
     });
 
     // Midi
-    document.querySelector('#midiSelect').addEventListener('change', e=>{connectMidi();});
-    document.querySelector('#midiConnect').addEventListener('click', e=>{connectMidi();});
+    document.querySelector('#midiSelect').addEventListener('change', () => connectMidi());
+    document.querySelector('#midiOutputSelect').addEventListener('change', () => saveSettings());
 
     // Devices
-    document.querySelector('#videoSelect').addEventListener('change', e=>{switchMedia();});
-    document.querySelector('#audioSelect').addEventListener('change', e=>{switchMedia();});
-    document.querySelector('#midiOutputSelect').addEventListener('change', e=>{saveSettings();});
-    document.querySelector('#micVolume').addEventListener('input', e=>{adjustMicVolume();});
+    document.querySelector('#videoSelect').addEventListener('change', () => switchMedia());
+    document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
+    document.querySelector('#micVolume').addEventListener('input', () => adjustMicVolume());
 
-    // Call
-    document.querySelector('#callStart').addEventListener('click', e=>{startCall();});
+    // Verbindung starten
+    document.querySelector('#startConnection').addEventListener('click', () => startConnection());
+
+    // Drag-and-Drop
+    fileList.addEventListener('dragover', handleDragOver);
+    fileList.addEventListener('dragleave', handleDragLeave);
+    fileList.addEventListener('drop', handleDrop);
 }
 
 // Initialisierung
 async function init() {
-    initWebSocket();
     await populateDeviceOptions();
     await populateMidiOptions();
     const mediaReady = await startMedia();
@@ -791,29 +763,29 @@ async function init() {
         addLog('Media-Setup fehlgeschlagen, Junge! Check mal Kamera/Mikro.');
     }
     adjustMicVolume();
-    await connectMidi();
     disableFileSharing();
 
     setEventListeners();
 
     pianos.createPiano({
-        'selector': '#piano', // The container the piano get's inserted
-        'enableMidi': true, // Enables midi input and visually shows the notes played with it
-        'playMidiNotes': false, // Play sound for the notes of the midi input
-        'keyPressedLocalRGB': [0, 255, 0], // RGB highlight values if a piano key gets clicked/pressed with mouse/touch
-        'keyPressedRemoteRGB': [255, 0, 0], // RGB highlight values if a piano key gets played with midi input
-        'pedalSoft': true, // Activates and displays the piano soft pedal
-        'pedalSostenuto': true, // Activates and displays the piano sostenuto pedal
-        'pedalSustain': true, // Activates and displays the piano sustain pedal
-        'undampedStrings': ['G6', 'C8'], // From-To notes which are undamped. Example common for acoustic pianos: ['G6', 'C8']. Set to false or [] to disable
+        'selector': '#piano',
+        'enableMidi': true,
+        'playMidiNotes': false,
+        'keyPressedLocalRGB': [0, 255, 0],
+        'keyPressedRemoteRGB': [255, 0, 0],
+        'pedalSoft': true,
+        'pedalSostenuto': true,
+        'pedalSustain': true,
+        'undampedStrings': ['G6', 'C8']
     });
 
     const metronome = new Metronome({
-        'selector': '#metronome', // The container the metronome  get's inserted
+        'selector': '#metronome'
     });
 
     new CamLocalDrag();
 
+    loadSettings(); // IP und Port laden
 }
 
 init();

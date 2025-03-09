@@ -19,9 +19,13 @@
             </div>
         </section>
         <section id="sidebar-right">
-            <section>
-                <button id="callStart">Anruf starten</button>
-                <button id="midiConnect">MIDI connecten</button>
+            <section id="connection">
+                <h2>Verbindung</h2>
+                <label for="serverIp">Server IP:</label>
+                <input type="text" id="serverIp" placeholder="z.B. localhost">
+                <label for="serverPort">Server Port:</label>
+                <input type="text" id="serverPort" placeholder="z.B. 8080">
+                <button id="startConnection">Start</button>
             </section>
             <section>
                 <div>
@@ -51,9 +55,13 @@
                 </div>
             </section>
             <section id="chat">
-                <div id="chat-msgs"></div>
-                <input type="text" id="messageInput" placeholder="Nachricht eingeben">
-                <button type="submit" id="messageSubmit">Senden</button>
+                <h2>Chat</h2>
+                <div id="chat-msgs" role="log" aria-live="polite"></div>
+                <form id="chat-form" aria-label="Chat-Nachrichten senden">
+                    <label for="messageInput">Nachricht:</label>
+                    <input type="text" id="messageInput" placeholder="Nachricht eingeben" required aria-required="true">
+                    <button type="submit">Senden</button>
+                </form>
             </section>
             <section id="log">
             </section>

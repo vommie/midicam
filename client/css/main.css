@@ -115,13 +115,78 @@ main video {
     white-space: nowrap;
 }
 
+#chat {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#chat h2 {
+    font-size: 1.2rem;
+    margin: 0;
+}
+
 #chat-msgs {
     white-space: pre-wrap;
     border: 1px solid #ccc;
     min-height: 74px;
     max-height: 200px;
+    overflow-y: auto;
+    padding: 5px;
 }
 
+#chat-form {
+    display: flex;
+    gap: 5px;
+}
+
+#chat-form label {
+    position: absolute;
+    clip: rect(0 0 0 0); /* Screenreader-freundlich, aber unsichtbar */
+}
+
+#messageInput {
+    flex-grow: 1;
+    padding: 5px;
+}
+
+#chat-form button {
+    padding: 5px 10px;
+}
+
+
+#connection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#connection h2 {
+    font-size: 1.2rem;
+    margin: 0;
+}
+
+#connection label {
+    font-weight: bold;
+}
+
+#connection input {
+    padding: 5px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#connection button {
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+#connection button:hover {
+    background-color: #45a049;
+}
 
 /* KI STUFF */
 
