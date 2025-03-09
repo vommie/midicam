@@ -182,10 +182,24 @@ main video {
     color: white;
     border: none;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
 }
 
-#connection button:hover {
+#connection button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+#connection button:hover:not(:disabled) {
     background-color: #45a049;
+}
+
+.throbber {
+    width: 16px;
+    height: 16px;
 }
 
 /* KI STUFF */

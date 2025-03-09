@@ -16,6 +16,7 @@ const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
 const serverIpInput = document.getElementById('serverIp');
 const serverPortInput = document.getElementById('serverPort');
+const startConnectionButton = document.getElementById('startConnection');
 let pc;
 let midiChannel;
 let fileChannel;
@@ -27,8 +28,8 @@ let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
 let isFileSharingReady = false;
-let ws; // WebSocket-Instanz
-const CHUNK_SIZE = 65536; // 64 KB für schnelleren Dateitransfer
+let ws;
+const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
 
 // Audio-Objekte mit Pfad assets/
@@ -342,7 +343,7 @@ async function connectMidi() {
                     addLog(`MIDI lokal gesendet: [${midiData}]`);
                     pianos.getMIDIMessage(message, 'local');
                     if (midiChannel && midiChannel.readyState === 'open') {
-                        midiChannel.send(midiData.buffer); // Binär senden
+                        midiChannel.send(midiData.buffer);
                     } else {
                         addLog('MIDI-Kanal nicht offen, Junge!');
                     }
@@ -374,11 +375,24 @@ async function startConnection() {
         return;
     }
 
+    // Button und Eingaben deaktivieren, Feedback anzeigen
+    startConnectionButton.disabled = true;
+    startConnectionButton.style.backgroundColor = '#ccc';
+    startConnectionButton.innerHTML = 'Warte auf Gegenseite ... <img src="assets/throbber.gif" alt="Warten" class="throbber">';
+    serverIpInput.disabled = true;
+    serverPortInput.disabled = true;
+
     // WebSocket-Verbindung zum Server
     ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
     ws.onopen = () => addLog('WebSocket offen, Junge!');
-    ws.onerror = (err) => addLog(`WebSocket Fehler: ${err.message || err}`);
-    ws.onclose = () => addLog('WebSocket zu, Junge!');
+    ws.onerror = (err) => {
+        addLog(`WebSocket Fehler: ${err.message || err}`);
+        resetConnectionUI();
+    };
+    ws.onclose = () => {
+        addLog('WebSocket zu, Junge!');
+        resetConnectionUI();
+    };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'offer') {
@@ -403,8 +417,8 @@ async function startConnection() {
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     midiChannel = pc.createDataChannel('midiChannel', {
-        ordered: false, // Keine Reihenfolge garantieren
-        maxRetransmits: 0 // Keine Wiederholungen, minimiert Latenz
+        ordered: false,
+        maxRetransmits: 0
     });
     setupMidiChannel(midiChannel);
 
@@ -441,10 +455,19 @@ async function startConnection() {
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             isFileSharingReady = true;
             enableFileSharing();
-            connectMidi(); // MIDI nach Verbindung initialisieren
+            connectMidi();
+            // Verbindung hergestellt: Button rot, Felder verstecken
+            startConnectionButton.disabled = false;
+            startConnectionButton.style.backgroundColor = '#ff4444';
+            startConnectionButton.innerHTML = 'Verbindung trennen';
+            serverIpInput.style.display = 'none';
+            serverPortInput.style.display = 'none';
+            document.querySelector('label[for="serverIp"]').style.display = 'none';
+            document.querySelector('label[for="serverPort"]').style.display = 'none';
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
+            resetConnectionUI();
         }
     };
 
@@ -455,9 +478,40 @@ async function startConnection() {
         addLog('Offer gesendet, Junge!');
     } catch (err) {
         addLog(`Fehler bei Offer: ${err}`);
+        resetConnectionUI();
     }
 
     saveSettings();
+}
+
+// Verbindung trennen
+function disconnect() {
+    if (pc) {
+        pc.close();
+        pc = null;
+        addLog('WebRTC-Verbindung getrennt, Junge!');
+    }
+    if (ws) {
+        ws.close();
+        ws = null;
+        addLog('WebSocket-Verbindung getrennt, Junge!');
+    }
+    isFileSharingReady = false;
+    disableFileSharing();
+    resetConnectionUI();
+}
+
+// UI zurücksetzen
+function resetConnectionUI() {
+    startConnectionButton.disabled = false;
+    startConnectionButton.style.backgroundColor = '#4CAF50';
+    startConnectionButton.innerHTML = 'Start';
+    serverIpInput.disabled = false;
+    serverPortInput.disabled = false;
+    serverIpInput.style.display = 'block';
+    serverPortInput.style.display = 'block';
+    document.querySelector('label[for="serverIp"]').style.display = 'block';
+    document.querySelector('label[for="serverPort"]').style.display = 'block';
 }
 
 // MIDI DataChannel-Setup
@@ -532,7 +586,7 @@ function setupFileChannel(channel) {
                 if (fileInfo.receivedBytes === fileInfo.totalBytes) {
                     const fileData = new Blob(fileInfo.chunks);
                     finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                    addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
+                    addLog(`Datei komplett empfangen: ${info.fileName}`);
                     fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
                     activeReceives.delete(fileId);
                 }
@@ -745,8 +799,14 @@ function setEventListeners() {
     document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#micVolume').addEventListener('input', () => adjustMicVolume());
 
-    // Verbindung starten
-    document.querySelector('#startConnection').addEventListener('click', () => startConnection());
+    // Verbindung starten/trennen
+    startConnectionButton.addEventListener('click', () => {
+        if (startConnectionButton.innerHTML.includes('Verbindung trennen')) {
+            disconnect();
+        } else {
+            startConnection();
+        }
+    });
 
     // Drag-and-Drop
     fileList.addEventListener('dragover', handleDragOver);
@@ -785,7 +845,7 @@ async function init() {
 
     new CamLocalDrag();
 
-    loadSettings(); // IP und Port laden
+    loadSettings();
 }
 
 init();
