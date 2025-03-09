@@ -1,0 +1,105 @@
+#metronome {
+    width: 300px;
+}
+
+.metronome {
+    --main-color: #fa5e46;
+
+    display: grid;
+    grid-auto-flow: row;
+    justify-items: center;
+    align-items: center;
+    grid-gap: 10px;
+    color: #ffffff;
+}
+
+.metronome .controls {
+    position: relative;
+    display: grid;
+    grid-template-columns: 50px auto;
+    justify-items: center;
+    align-items: center;
+}
+
+.metronome #play {
+    border: 0;
+    background: transparent;
+    box-sizing: border-box;
+    width: 0;
+    height: 27px;
+    border-color: transparent transparent transparent var(--main-color);
+    transition: 100ms all ease;
+    cursor: pointer;
+    /* transform: scale(.4); */
+    border-style: double;
+    border-width: 0px 0 0px 22px;
+    margin: 0;
+    padding: 0;
+}
+
+.metronome #play.paused {
+    border-style: solid;
+    border-width: 14px 0 14px 22px;
+}
+
+.metronome #play:hover {
+    border-color: transparent transparent transparent #ffffff;
+}
+
+.metronome #beat-visuals {
+    display: inline-grid;
+    grid-auto-flow: column;
+    column-gap: 4px;
+}
+
+.metronome .beat-visual {
+    width: 15px;
+    height: 15px;
+    border: 1px solid #ffffff;
+    border-radius: 500px;
+}
+
+.metronome .beat-visual.active {
+    background-color: var(--main-color);
+}
+
+.metronome .input-scrollable {
+    user-select: none;
+    border: 0;
+    outline: 0;
+    border-width: 0px;
+    background: transparent;
+    font-weight: 900;
+    color: var(--main-color);
+    -moz-appearance: textfield;
+}
+
+input#bpm {
+    text-align: center;
+    width: 140px;
+    height: 65px;
+    font-size: 5rem;
+}
+
+input#beats {
+    text-align: center;
+    width: 20px;
+    font-size: 2.2rem;
+}
+
+.metronome .input-scrollable:hover,
+.metronome .input-scrollable:active,
+.metronome .input-scrollable:focus {
+    -webkit-appearance: none;
+    outline: none !important;
+    border: none !important;
+    border-width: 0px;
+    color: #ffffff;
+}
+
+/* Remove border on: Chrome, Safari, Edge, Opera */
+.metronome .input-scrollable::-webkit-outer-spin-button,
+.metronome .input-scrollable::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

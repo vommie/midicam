@@ -1,8 +1,11 @@
+import { Pianos } from "./piano.js";
+import { Metronome } from "./metronome.js";
+
 // Grundsetup
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log');
-const chat = document.getElementById('chat');
+const chat = document.getElementById('chat-msgs');
 const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
@@ -22,6 +25,7 @@ let currentAudioId = '';
 let midiAccess = null;
 let isFileSharingReady = false;
 const CHUNK_SIZE = 16384;
+const pianos = new Pianos();
 
 // Audio-Objekte mit Pfad assets/
 const fileSentSound = new Audio('assets/file_sent.wav');
@@ -30,7 +34,9 @@ const fileErrorSound = new Audio('assets/file_error.wav');
 
 // Logging-Funktion
 function addLog(msg) {
-    log.textContent += `${msg}\n`;
+    const line = document.createElement('div');
+    line.textContent += `${msg}`;
+    log.appendChild(line);
 }
 
 // Chat-Nachricht anzeigen
@@ -341,6 +347,7 @@ async function connectMidi() {
                 selectedInput.onmidimessage = (message) => {
                     const midiData = Array.from(message.data);
                     addLog(`MIDI lokal gesendet: [${midiData}]`);
+                    pianos.getMIDIMessage(message, 'local');
                     if (midiChannel && midiChannel.readyState === 'open') {
                         midiChannel.send(JSON.stringify(midiData));
                     } else {
@@ -426,6 +433,7 @@ function setupMidiChannel(channel) {
     channel.onmessage = (event) => {
         const midiData = JSON.parse(event.data);
         addLog(`MIDI vom anderen empfangen: [${midiData}]`);
+        pianos.getMIDIMessage({data: midiData}, 'remote');
         if (midiAccess && midiOutputSelect.value) {
             const selectedOutputId = midiOutputSelect.value;
             const outputs = Array.from(midiAccess.outputs.values());
@@ -748,6 +756,30 @@ function sendChatMessage() {
     }
 }
 
+function setEventListeners() {
+    // Chat
+    document.querySelector('#messageSubmit').addEventListener('click', e=>{sendChatMessage();});
+    document.querySelector('#messageInput').addEventListener('keydown', e=>{
+        if(e.key === 'Enter') {
+            e.preventDefault();
+            sendChatMessage();
+          }
+    });
+
+    // Midi
+    document.querySelector('#midiSelect').addEventListener('change', e=>{connectMidi();});
+    document.querySelector('#midiConnect').addEventListener('click', e=>{connectMidi();});
+
+    // Devices
+    document.querySelector('#videoSelect').addEventListener('change', e=>{switchMedia();});
+    document.querySelector('#audioSelect').addEventListener('change', e=>{switchMedia();});
+    document.querySelector('#midiOutputSelect').addEventListener('change', e=>{saveSettings();});
+    document.querySelector('#micVolume').addEventListener('input', e=>{adjustMicVolume();});
+
+    // Call
+    document.querySelector('#callStart').addEventListener('click', e=>{startCall();});
+}
+
 // Initialisierung
 async function init() {
     initWebSocket();
@@ -760,6 +792,26 @@ async function init() {
     adjustMicVolume();
     await connectMidi();
     disableFileSharing();
+
+    setEventListeners();
+
+    pianos.createPiano({
+        'selector': '#piano', // The container the piano get's inserted
+        'enableMidi': true, // Enables midi input and visually shows the notes played with it
+        'playMidiNotes': false, // Play sound for the notes of the midi input
+        'keyPressedLocalRGB': [0, 255, 0], // RGB highlight values if a piano key gets clicked/pressed with mouse/touch
+        'keyPressedRemoteRGB': [255, 0, 0], // RGB highlight values if a piano key gets played with midi input
+        'pedalSoft': true, // Activates and displays the piano soft pedal
+        'pedalSostenuto': true, // Activates and displays the piano sostenuto pedal
+        'pedalSustain': true, // Activates and displays the piano sustain pedal
+        'undampedStrings': ['G6', 'C8'], // From-To notes which are undamped. Example common for acoustic pianos: ['G6', 'C8']. Set to false or [] to disable
+    });
+
+    const metronome = new Metronome({
+        'selector': '#metronome', // The container the metronome  get's inserted
+    });
+
+
 }
 
 init();

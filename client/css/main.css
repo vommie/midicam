@@ -1,0 +1,136 @@
+html, body {
+    margin: 0;
+    height: 100%;
+    background-color: #222;
+}
+
+body {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1rem;
+    line-height: 1rem;
+    letter-spacing: 0.025rem;
+    font-family: sans-serif;
+}
+
+main > header {
+    text-align: center;
+    font-weight: bold;
+    font-size: 2rem;
+    padding: 10px 5px;
+    grid-area: hd;
+}
+
+main {
+    display: grid;
+    grid-template-areas: "c sr" "p p";
+    grid-template-columns: 1fr 400px;
+    grid-template-rows: 1fr auto;
+    grid-auto-flow: row;
+    grid-row-gap: 8px;
+    height: 100%;
+}
+
+#cams {
+    grid-area: c;
+}
+
+#sidebar-right {
+    grid-area: sr;
+}
+
+#metronome {
+    grid-area: m;
+}
+
+#piano {
+    grid-area: p;
+}
+
+#piano-pedals {
+    grid-area: pp;
+}
+
+
+#sidebar-right {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: min-content min-content min-content min-content auto;
+    grid-auto-flow: row;
+    grid-row-gap: 4px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+
+
+#log {
+    overflow: scroll;
+    max-width: 100%;
+    font-family: monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+#chat-msgs {
+    white-space: pre-wrap;
+    border: 1px solid #ccc;
+    min-height: 74px;
+    max-height: 200px;
+}
+
+
+/* KI STUFF */
+
+video { width: 300px; border: 1px solid #ccc; }
+
+
+
+#fileList {
+    border: 1px solid #ccc;
+    min-height: 100px;
+    padding: 10px;
+    margin-top: 10px;
+    background: #f9f9f9;
+}
+#fileList.dragover {
+    background: #e0e0e0;
+}
+.file-item {
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+.file-item.sent {
+    background: #d4edda;
+}
+.file-item.received {
+    background: #cce5ff;
+}
+.file-item a {
+    color: inherit;
+    text-decoration: underline;
+    margin-left: 5px;
+}
+.file-item .progress-container {
+    width: 100%;
+    background: #ddd;
+    height: 10px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    display: none;
+}
+.file-item .progress-bar {
+    height: 100%;
+    background: #4caf50;
+    width: 0;
+    transition: width 0.3s;
+}
+.file-item .progress-text {
+    position: absolute;
+    top: -20px;
+    right: 5px;
+    font-size: 12px;
+    color: #333;
+}
