@@ -9,7 +9,7 @@ class CamLocalDrag {
         this.startY = 0;
         this.startWidth = 0;
         this.startHeight = 0;
-        this.startRight = 0; // Neu: Speichert den ursprünglichen right-Wert beim Resizen
+        this.startRight = 0;
         this.minVisiblePx = 20;
 
         // Load saved position and size from localStorage
@@ -34,6 +34,11 @@ class CamLocalDrag {
             this.localVideoWrapper.style.height = '200px';
         }
 
+        // Warten, bis das Video geladen ist, um das Seitenverhältnis korrekt zu berechnen
+        this.localVideo.addEventListener('loadedmetadata', () => {
+            this.ensureWithinViewport();
+        });
+
         this.ensureWithinViewport();
         window.addEventListener('resize', () => this.ensureWithinViewport());
 
@@ -41,6 +46,7 @@ class CamLocalDrag {
     }
 
     addEventListeners() {
+        // Maus-Events für Dragging
         this.localVideo.addEventListener('mousedown', (e) => {
             this.isDragging = true;
             const rect = this.localVideoWrapper.getBoundingClientRect();
@@ -49,64 +55,106 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
+        // Touch-Events für Dragging
+        this.localVideo.addEventListener('touchstart', (e) => {
+            this.isDragging = true;
+            const touch = e.touches[0];
+            const rect = this.localVideoWrapper.getBoundingClientRect();
+            this.startX = (window.innerWidth - touch.clientX) - parseInt(this.localVideoWrapper.style.right);
+            this.startY = touch.clientY - rect.top;
+            e.preventDefault();
+        });
+
+        // Maus-Events für Resizing
         this.resizeHandle.addEventListener('mousedown', (e) => {
             this.isResizing = true;
             this.startX = e.clientX;
             this.startY = e.clientY;
             this.startWidth = this.localVideoWrapper.offsetWidth;
             this.startHeight = this.localVideoWrapper.offsetHeight;
-            this.startRight = parseInt(this.localVideoWrapper.style.right); // Speichere den Ausgangs-right-Wert
+            this.startRight = parseInt(this.localVideoWrapper.style.right);
             e.preventDefault();
         });
 
-        document.addEventListener('mousemove', (e) => {
-            if (this.isDragging) {
-                let newRight = (window.innerWidth - e.clientX) - this.startX;
-                let newTop = e.clientY - this.startY;
-
-                const maxRight = window.innerWidth - this.minVisiblePx;
-                const minRight = -(this.localVideoWrapper.offsetWidth - this.minVisiblePx);
-                const maxTop = window.innerHeight - this.minVisiblePx;
-                const minTop = -(this.localVideoWrapper.offsetHeight - this.minVisiblePx);
-
-                newRight = Math.max(minRight, Math.min(newRight, maxRight));
-                newTop = Math.max(minTop, Math.min(newTop, maxTop));
-
-                this.localVideoWrapper.style.right = newRight + 'px';
-                this.localVideoWrapper.style.top = newTop + 'px';
-                this.triggerChangeEvent('position', { right: newRight, top: newTop });
-            }
-
-            if (this.isResizing) {
-                const widthChange = e.clientX - this.startX; // Änderung der Breite
-                const newWidth = this.startWidth + widthChange;
-                const aspectRatio = this.localVideo.videoWidth / this.localVideo.videoHeight || 16 / 9;
-                const newHeight = newWidth / aspectRatio;
-
-                // Begrenze die Größe
-                const maxWidth = window.innerWidth - this.startRight + (this.startWidth - this.minVisiblePx);
-                const maxHeight = window.innerHeight - parseInt(this.localVideoWrapper.style.top) + (this.localVideoWrapper.offsetHeight - this.minVisiblePx);
-
-                const boundedWidth = Math.max(100, Math.min(newWidth, maxWidth));
-                const boundedHeight = Math.max(100 * aspectRatio, Math.min(newHeight, maxHeight));
-
-                // Passe right an, um die obere linke Ecke fix zu halten
-                const newRight = this.startRight + (this.startWidth - boundedWidth);
-
-                this.localVideoWrapper.style.width = boundedWidth + 'px';
-                this.localVideoWrapper.style.height = boundedHeight + 'px';
-                this.localVideoWrapper.style.right = newRight + 'px';
-
-                this.triggerChangeEvent('size', { width: boundedWidth, height: boundedHeight });
-                this.triggerChangeEvent('position', { right: newRight, top: parseInt(this.localVideoWrapper.style.top) });
-            }
+        // Touch-Events für Resizing
+        this.resizeHandle.addEventListener('touchstart', (e) => {
+            this.isResizing = true;
+            const touch = e.touches[0];
+            this.startX = touch.clientX;
+            this.startY = touch.clientY;
+            this.startWidth = this.localVideoWrapper.offsetWidth;
+            this.startHeight = this.localVideoWrapper.offsetHeight;
+            this.startRight = parseInt(this.localVideoWrapper.style.right);
+            e.preventDefault();
         });
 
+        // Mousemove und Touchmove
+        document.addEventListener('mousemove', (e) => {
+            this.handleMove(e);
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            this.handleMove(e.touches[0]);
+            e.preventDefault();
+        });
+
+        // Mouseup und Touchend
         document.addEventListener('mouseup', () => {
             this.isDragging = false;
             this.isResizing = false;
         });
 
+        document.addEventListener('touchend', () => {
+            this.isDragging = false;
+            this.isResizing = false;
+        });
+
+        // Doppelklick zum Zurücksetzen
+        this.localVideoWrapper.addEventListener('dblclick', () => {
+            this.localVideoWrapper.style.right = '20px';
+            this.localVideoWrapper.style.top = '20px';
+            this.localVideoWrapper.style.width = '300px';
+            this.localVideoWrapper.style.height = '200px';
+
+            this.triggerChangeEvent('position', { right: 20, top: 20 });
+            this.triggerChangeEvent('size', { width: 300, height: 200 });
+        });
+
+        // Tastatureingaben für Barrierefreiheit
+        this.localVideoWrapper.setAttribute('tabindex', '0');
+        this.localVideoWrapper.setAttribute('aria-label', 'Lokales Videofenster, verwenden Sie Pfeiltasten zum Verschieben');
+
+        this.localVideoWrapper.addEventListener('keydown', (e) => {
+            let right = parseInt(this.localVideoWrapper.style.right) || 20;
+            let top = parseInt(this.localVideoWrapper.style.top) || 20;
+            const step = 10;
+
+            if (e.key === 'ArrowRight') {
+                right -= step;
+            } else if (e.key === 'ArrowLeft') {
+                right += step;
+            } else if (e.key === 'ArrowUp') {
+                top -= step;
+            } else if (e.key === 'ArrowDown') {
+                top += step;
+            } else {
+                return;
+            }
+
+            const maxRight = window.innerWidth - this.minVisiblePx;
+            const minRight = -(this.localVideoWrapper.offsetWidth - this.minVisiblePx);
+            const maxTop = window.innerHeight - this.minVisiblePx;
+            const minTop = -(this.localVideoWrapper.offsetHeight - this.minVisiblePx);
+
+            right = Math.max(minRight, Math.min(right, maxRight));
+            top = Math.max(minTop, Math.min(top, maxTop));
+
+            this.localVideoWrapper.style.right = right + 'px';
+            this.localVideoWrapper.style.top = top + 'px';
+            this.triggerChangeEvent('position', { right, top });
+        });
+
+        // Cursor-Logik
         this.localVideoWrapper.addEventListener('mousemove', (e) => {
             const rect = this.localVideoWrapper.getBoundingClientRect();
             const resizeAreaSize = 15;
@@ -124,6 +172,49 @@ class CamLocalDrag {
         this.localVideoWrapper.addEventListener('videoChange', (e) => {
             console.log('Video geändert:', e.detail);
         });
+    }
+
+    handleMove(e) {
+        if (this.isDragging) {
+            let newRight = (window.innerWidth - e.clientX) - this.startX;
+            let newTop = e.clientY - this.startY;
+
+            const maxRight = window.innerWidth - this.minVisiblePx;
+            const minRight = -(this.localVideoWrapper.offsetWidth - this.minVisiblePx);
+            const maxTop = window.innerHeight - this.minVisiblePx;
+            const minTop = -(this.localVideoWrapper.offsetHeight - this.minVisiblePx);
+
+            newRight = Math.max(minRight, Math.min(newRight, maxRight));
+            newTop = Math.max(minTop, Math.min(newTop, maxTop));
+
+            this.localVideoWrapper.style.right = newRight + 'px';
+            this.localVideoWrapper.style.top = newTop + 'px';
+            this.triggerChangeEvent('position', { right: newRight, top: newTop });
+        }
+
+        if (this.isResizing) {
+            const widthChange = e.clientX - this.startX;
+            const newWidth = this.startWidth + widthChange;
+            const aspectRatio = (this.localVideo.videoWidth && this.localVideo.videoHeight)
+                ? this.localVideo.videoWidth / this.localVideo.videoHeight
+                : 16 / 9;
+            const newHeight = newWidth / aspectRatio;
+
+            const maxWidth = window.innerWidth - this.startRight + (this.startWidth - this.minVisiblePx);
+            const maxHeight = window.innerHeight - parseInt(this.localVideoWrapper.style.top) + (this.localVideoWrapper.offsetHeight - this.minVisiblePx);
+
+            const boundedWidth = Math.max(100, Math.min(newWidth, maxWidth));
+            const boundedHeight = Math.max(100 * aspectRatio, Math.min(newHeight, maxHeight));
+
+            const newRight = this.startRight + (this.startWidth - boundedWidth);
+
+            this.localVideoWrapper.style.width = boundedWidth + 'px';
+            this.localVideoWrapper.style.height = boundedHeight + 'px';
+            this.localVideoWrapper.style.right = newRight + 'px';
+
+            this.triggerChangeEvent('size', { width: boundedWidth, height: boundedHeight });
+            this.triggerChangeEvent('position', { right: newRight, top: parseInt(this.localVideoWrapper.style.top) });
+        }
     }
 
     ensureWithinViewport() {

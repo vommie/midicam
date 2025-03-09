@@ -813,6 +813,7 @@ async function init() {
     });
 
     new CamLocalDrag();
+
 }
 
 init();
