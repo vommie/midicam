@@ -50,6 +50,42 @@ main {
     grid-area: pp;
 }
 
+#cams {
+    position: relative;
+    width: 100%;
+    height: 100vh; /* Beispielhöhe */
+}
+
+#remoteVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+#localVideoWrapper {
+    position: absolute;
+    z-index: 1000;
+    cursor: move; /* Drag-Cursor für den gesamten Wrapper */
+}
+
+#localVideo {
+    width: 100%; /* Füllt den Wrapper */
+    height: 100%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    display: block; /* Entfernt unerwünschte Lücken */
+}
+
+#resizeHandle {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    background: #fff;
+    right: 0;
+    bottom: 0;
+    cursor: nw-resize;
+    z-index: 1001; /* Über dem Video */
+}
 
 #sidebar-right {
     display: grid;
@@ -60,8 +96,6 @@ main {
     height: 100%;
     overflow-y: auto;
 }
-
-
 
 #log {
     overflow: scroll;

@@ -12,8 +12,11 @@
 <body>
     <main>
         <section id="cams">
-            <video id="localVideo" autoplay muted></video>
             <video id="remoteVideo" autoplay></video>
+            <div id="localVideoWrapper">
+                <video id="localVideo" autoplay muted></video>
+                <div id="resizeHandle"></div>
+            </div>
         </section>
         <section id="sidebar-right">
             <section>
