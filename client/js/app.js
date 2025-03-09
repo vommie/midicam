@@ -363,7 +363,6 @@ async function connectMidi() {
 
 // WebRTC-Verbindung starten
 async function startConnection() {
-    // Sicherstellen, dass alte Verbindungen vollständig geschlossen sind
     if (pc) {
         pc.close();
         pc = null;
@@ -399,6 +398,8 @@ async function startConnection() {
     serverPortInput.disabled = true;
 
     ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+    let pendingIceCandidates = []; // Puffer für ICE-Candidates
+
     ws.onopen = () => {
         addLog('WebSocket offen, Junge!');
     };
@@ -419,7 +420,7 @@ async function startConnection() {
         }
         if (msg.type === 'disconnected-by-peer') {
             addLog('Verbindung von Peer getrennt, Junge!');
-            disconnect(); // Lokale Trennung auslösen
+            disconnect();
             return;
         }
         if (msg.type === 'offer') {
@@ -428,12 +429,29 @@ async function startConnection() {
             await pc.setLocalDescription(answer);
             ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
             addLog('Answer gesendet, Junge!');
+            // Verarbeite gepufferte Candidates
+            while (pendingIceCandidates.length > 0) {
+                const candidate = pendingIceCandidates.shift();
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                addLog('Gepufferter ICE-Kandidat hinzugefügt, Junge!');
+            }
         } else if (msg.type === 'answer') {
             await pc.setRemoteDescription(new RTCSessionDescription(msg));
             addLog('Answer empfangen, Junge!');
+            // Verarbeite gepufferte Candidates
+            while (pendingIceCandidates.length > 0) {
+                const candidate = pendingIceCandidates.shift();
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                addLog('Gepufferter ICE-Kandidat hinzugefügt, Junge!');
+            }
         } else if (msg.type === 'candidate') {
-            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-            addLog('ICE-Kandidat empfangen, Junge!');
+            if (pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                addLog('ICE-Kandidat empfangen und hinzugefügt, Junge!');
+            } else {
+                pendingIceCandidates.push(msg.candidate);
+                addLog('ICE-Kandidat gepuffert, warte auf remoteDescription, Junge!');
+            }
         }
     };
 
@@ -506,7 +524,7 @@ async function startConnection() {
         addLog('Offer gesendet, Junge!');
     } catch (err) {
         addLog(`Fehler bei Offer: ${err}`);
-        // resetConnectionUI();
+        resetConnectionUI();
     }
 
     saveSettings();
@@ -657,7 +675,7 @@ function setupFileChannel(channel) {
 
 // Filesharing aktivieren/deaktivieren
 function enableFileSharing() {
-    fileList.style.backgroundColor = '#f9f9f9';
+    fileList.style.backgroundColor = 'transparent';
     fileList.style.opacity = '1';
     fileList.style.pointerEvents = 'auto';
     fileList.querySelector('p').textContent = 'Dateien hierher ziehen oder fallen lassen';
