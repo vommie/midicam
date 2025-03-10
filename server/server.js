@@ -4,7 +4,7 @@ const wss = new WebSocket.Server({ port: 8080 });
 let clients = []; // Maximale Größe: 2
 
 function disconnectAllClients() {
-    console.log('Trenne alle Clients, Junge!');
+    console.log('Trenne alle Clients.');
     clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'disconnected-by-peer' }));
@@ -16,7 +16,7 @@ function disconnectAllClients() {
 }
 
 wss.on('connection', (ws) => {
-    console.log('Neuer Client verbunden, Junge!');
+    console.log('Neuer Client verbunden.');
 
     if (clients.length >= 2) {
         console.log('Zu viele Teilnehmer, Verbindung abgelehnt!');
@@ -45,7 +45,7 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
-        console.log('Client getrennt, Junge!');
+        console.log('Client getrennt.');
         // Wenn ein Client sich trennt, alle trennen
         disconnectAllClients();
     });
@@ -57,4 +57,4 @@ wss.on('connection', (ws) => {
     });
 });
 
-console.log('WebSocket-Server läuft auf ws://localhost:8080, Junge!');
+console.log('WebSocket-Server läuft auf ws://localhost:8080.');
