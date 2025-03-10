@@ -927,6 +927,16 @@ function setEventListeners() {
     fileList.addEventListener('drop', handleDrop);
 }
 
+// MIDI von Piano-Tasten senden
+function sendMidiMessage(midiData) {
+    if (midiChannel && midiChannel.readyState === 'open') {
+        midiChannel.send(midiData.buffer); // ArrayBuffer senden
+        addLog(`MIDI von Piano gesendet: [${midiData}]`);
+    } else {
+        addLog('MIDI-Kanal nicht offen, kann nicht senden.');
+    }
+}
+
 // Initialisierung
 async function init() {
     await populateDeviceOptions();
@@ -949,7 +959,8 @@ async function init() {
         'pedalSoft': true,
         'pedalSostenuto': true,
         'pedalSustain': true,
-        'undampedStrings': ['G6', 'C8']
+        'undampedStrings': ['G6', 'C8'],
+        'sendMidiMessage': sendMidiMessage
     });
 
     const metronome = new Metronome({

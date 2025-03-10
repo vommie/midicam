@@ -68,9 +68,7 @@ class Pianos {
                         piano.addKeyPressedStyle(keyElement, velocity, src);
                         if(piano.pressedKeys.indexOf(keyElement.dataset.id) === -1) piano.pressedKeys.push(keyElement.dataset.id);
                     }
-                    if(piano.opts.playMidiNotes) {
-                        piano.playNote(keyElement.dataset.id, velocity);
-                    }
+                    piano.playNote(keyElement.dataset.id, velocity);
                 }
             });
         });
@@ -204,6 +202,7 @@ class Piano {
         this.mouseIsDown = false;
         this.addMouseHandling();
         if(!opts.noScale === true) this.handleResize();
+        this.sendMidiMessage = opts.sendMidiMessage || (() => {});
     }
 
     getTemplates() {
@@ -355,6 +354,7 @@ class Piano {
         console.log(`piano ${this.id}: key ${id} pressed: ${this.getKeyName(id, true)}`);
         this.addKeyPressedStyle(this.elements.keys[id]);
         this.playNote(id);
+        this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
     }
 
     onKeyRelease(e) {
@@ -363,6 +363,7 @@ class Piano {
         console.log(`piano ${this.id}: key ${id} released: ${this.getKeyName(id, true)}`);
         this.removeKeyPressedStyle(this.elements.keys[id]);
         this.stopNote(id);
+        this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
     }
 
     onMouseMove(e) {
@@ -372,8 +373,10 @@ class Piano {
         console.log(`piano ${this.id}: gliss from key ${this.lastKeyId} (${this.getKeyName(this.lastKeyId, true)}) to ${id} (${this.getKeyName(id, true)})`);
         this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
         this.stopNote(this.lastKeyId);
+        this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
         this.lastKeyId = id;
         this.playNote(id);
+        this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
         this.addKeyPressedStyle(this.elements.keys[id]);
     }
 
@@ -387,7 +390,7 @@ class Piano {
     }
 
     playNote(id, velocity = 127) {
-        this.soundPlayer.playNote(this.getKeyName(id, true, 'major', false), velocity);
+        if(this.opts.playMidiNotes) this.soundPlayer.playNote(this.getKeyName(id, true, 'major', false), velocity);
     }
 
     stopNote(id) {
@@ -523,6 +526,7 @@ class Piano {
             this.sustainedKeyIds.forEach(id=>{
                 if(this.pressedKeys.includes(id)) return;
                 this.stopNote(id);
+                this.sendMidiMessage(new Uint8Array([128, id, 0]));
             });
             this.sustainedKeyIds = [];
         }
