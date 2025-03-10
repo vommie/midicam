@@ -42,6 +42,7 @@ function addLog(msg) {
     const line = document.createElement('div');
     line.textContent += `${msg}`;
     log.appendChild(line);
+    log.scrollTop = log.scrollHeight; // Auto-Scroll zum neuesten Log
 }
 
 // Chat-Nachricht anzeigen
@@ -221,7 +222,7 @@ async function startMedia() {
         } else if (err.name === 'NotAllowedError') {
             addLog('Fehler bei Media: Zugriff auf Kamera/Mikrofon verweigert.');
         } else {
-            addLog(`Fehler bei Media: ${err.message || err}.`);
+            addLog(`Fehler bei Media: ${err.message || err}`);
         }
         return false;
     }
@@ -408,11 +409,34 @@ async function startConnection() {
     serverIpInput.disabled = true;
     serverPortInput.disabled = true;
 
-    ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+    pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
     let pendingIceCandidates = []; // Puffer für ICE-Candidates
 
-    ws.onopen = () => {
+    // Tracks hinzufügen und sicherstellen, dass sie bereit sind
+    const trackPromises = localStream.getTracks().map(track => {
+        addLog(`Track hinzufüge: ${track.kind}`);
+        return pc.addTrack(track, localStream);
+    });
+    await Promise.all(trackPromises);
+    addLog('Alle Tracks hinzugefügt.');
+
+    ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+
+    ws.onopen = async () => {
         addLog('WebSocket offen.');
+        try {
+            addLog(`RTCPeerConnection Zustand vor Offer: ${pc.signalingState}`);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            addLog(`LocalDescription gesetzt: ${pc.localDescription.type}`);
+            ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
+            addLog('Offer gesendet.');
+        } catch (err) {
+            addLog(`Fehler bei Offer-Erstellung: ${err}`);
+            resetConnectionUI();
+        }
     };
     ws.onerror = (err) => {
         addLog(`WebSocket Fehler: ${err.message || err}`);
@@ -424,6 +448,7 @@ async function startConnection() {
     };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
+        addLog(`Nachricht empfangen: ${JSON.stringify(msg)}`);
         if (msg.type === 'error') {
             addLog(`Server-Fehler: ${msg.message}`);
             resetConnectionUI();
@@ -435,23 +460,35 @@ async function startConnection() {
             return;
         }
         if (msg.type === 'offer') {
-            await pc.setRemoteDescription(new RTCSessionDescription(msg));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
-            addLog('Answer gesendet.');
-            while (pendingIceCandidates.length > 0) {
-                const candidate = pendingIceCandidates.shift();
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+            try {
+                addLog(`RTCPeerConnection Zustand vor setRemoteDescription (offer): ${pc.signalingState}`);
+                await pc.setRemoteDescription(new RTCSessionDescription(msg));
+                addLog('RemoteDescription (offer) gesetzt.');
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                addLog(`LocalDescription (answer) gesetzt: ${pc.localDescription.type}`);
+                ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
+                addLog('Answer gesendet.');
+                while (pendingIceCandidates.length > 0) {
+                    const candidate = pendingIceCandidates.shift();
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+                }
+            } catch (err) {
+                addLog(`Fehler bei Offer-Verarbeitung: ${err}`);
             }
         } else if (msg.type === 'answer') {
-            await pc.setRemoteDescription(new RTCSessionDescription(msg));
-            addLog('Answer empfangen.');
-            while (pendingIceCandidates.length > 0) {
-                const candidate = pendingIceCandidates.shift();
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+            try {
+                addLog(`RTCPeerConnection Zustand vor setRemoteDescription (answer): ${pc.signalingState}`);
+                await pc.setRemoteDescription(new RTCSessionDescription(msg));
+                addLog('RemoteDescription (answer) gesetzt.');
+                while (pendingIceCandidates.length > 0) {
+                    const candidate = pendingIceCandidates.shift();
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+                }
+            } catch (err) {
+                addLog(`Fehler bei Answer-Verarbeitung: ${err}`);
             }
         } else if (msg.type === 'candidate') {
             if (pc.remoteDescription) {
@@ -464,35 +501,6 @@ async function startConnection() {
         }
     };
 
-    pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    midiChannel = pc.createDataChannel('midiChannel', {
-        ordered: false,
-        maxRetransmits: 0
-    });
-    setupMidiChannel(midiChannel);
-
-    fileChannel = pc.createDataChannel('fileChannel');
-    setupFileChannel(fileChannel);
-
-    chatChannel = pc.createDataChannel('chatChannel', { ordered: true });
-    setupChatChannel(chatChannel);
-
-    pc.ondatachannel = (event) => {
-        if (event.channel.label === 'midiChannel') {
-            midiChannel = event.channel;
-            setupMidiChannel(midiChannel);
-        } else if (event.channel.label === 'fileChannel') {
-            fileChannel = event.channel;
-            setupFileChannel(fileChannel);
-        } else if (event.channel.label === 'chatChannel') {
-            chatChannel = event.channel;
-            setupChatChannel(chatChannel);
-        }
-    };
     pc.onicecandidate = (event) => {
         if (event.candidate && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
@@ -527,17 +535,29 @@ async function startConnection() {
         }
     };
 
-    try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
-        addLog('Offer gesendet.');
-    } catch (err) {
-        addLog(`Fehler bei Offer: ${err}`);
-    }
+    // DataChannels einrichten
+    midiChannel = pc.createDataChannel('midiChannel', { ordered: false, maxRetransmits: 0 });
+    setupMidiChannel(midiChannel);
+    fileChannel = pc.createDataChannel('fileChannel');
+    setupFileChannel(fileChannel);
+    chatChannel = pc.createDataChannel('chatChannel', { ordered: true });
+    setupChatChannel(chatChannel);
+
+    pc.ondatachannel = (event) => {
+        if (event.channel.label === 'midiChannel') {
+            midiChannel = event.channel;
+            setupMidiChannel(midiChannel);
+        } else if (event.channel.label === 'fileChannel') {
+            fileChannel = event.channel;
+            setupFileChannel(fileChannel);
+        } else if (event.channel.label === 'chatChannel') {
+            chatChannel = event.channel;
+            setupChatChannel(chatChannel);
+        }
+    };
 
     saveSettings();
-};
+}
 
 // Verbindung trennen
 function disconnect() {
@@ -662,7 +682,7 @@ function setupFileChannel(channel) {
                 if (fileInfo.receivedBytes === fileInfo.totalBytes) {
                     const fileData = new Blob(fileInfo.chunks);
                     finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                    addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
+                    addLog(`Datei komplett empfangen: ${info.fileName}`);
                     fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
                     activeReceives.delete(fileId);
                 }
@@ -686,7 +706,6 @@ function setupFileChannel(channel) {
 function enableFileSharing() {
     fileList.style.backgroundColor = '#0F0F0F';
     fileList.style.opacity = '1';
-    fileList.style.pointerEvents = 'auto';
     fileList.querySelector('p').textContent = 'Drop file here';
     addLog('Filesharing aktiviert.');
 }
@@ -694,7 +713,6 @@ function enableFileSharing() {
 function disableFileSharing() {
     fileList.style.backgroundColor = 'transparent';
     fileList.style.opacity = '0.5';
-    fileList.style.pointerEvents = 'none';
     fileList.querySelector('p').textContent = 'Filesharing unavailable without connection';
     addLog('Filesharing deaktiviert.');
 }
@@ -763,12 +781,12 @@ function addFileToList(fileName, fileType, fileData, isSent, showProgress = fals
     fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
 
     const direction = document.createElement('span');
-    direction.classList.add('direction')
+    direction.classList.add('direction');
     direction.textContent = isSent ? '⬆' : '⬇';
     fileItem.appendChild(direction);
 
     const icon = document.createElement('img');
-    icon.classList.add('icon')
+    icon.classList.add('icon');
     icon.src = 'assets/' + getFileIcon(fileType);
     fileItem.appendChild(icon);
 

@@ -38,6 +38,7 @@ wss.on('connection', (ws) => {
             // Normale Weiterleitung an den anderen Client
             clients.forEach((client) => {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    console.log(`Sende Nachricht an Client: ${JSON.stringify(msg)}`);
                     client.send(JSON.stringify(msg));
                 }
             });
@@ -46,13 +47,11 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         console.log('Client getrennt.');
-        // Wenn ein Client sich trennt, alle trennen
         disconnectAllClients();
     });
 
     ws.on('error', (err) => {
         console.error('WebSocket Fehler:', err);
-        // Bei Fehler auch alle trennen
         disconnectAllClients();
     });
 });
