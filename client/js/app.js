@@ -82,15 +82,33 @@ function loadSettings() {
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
+        addLog(`Rohdaten der Geräte: ${JSON.stringify(devices.map(d => ({ kind: d.kind, label: d.label, deviceId: d.deviceId })))}`);
+
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         const audioDevices = devices.filter(device => device.kind === 'audioinput');
+        addLog(`Erkannte Video-Geräte: ${videoDevices.length}, Audio-Geräte: ${audioDevices.length}`);
 
-        videoSelect.innerHTML = videoDevices.map(device =>
-            `<option value="${device.deviceId}">${device.label || 'Kamera ' + device.deviceId.slice(0, 5)}</option>`
-        ).join('');
-        audioSelect.innerHTML = audioDevices.map(device =>
-            `<option value="${device.deviceId}">${device.label || 'Mikrofon ' + device.deviceId.slice(0, 5)}</option>`
-        ).join('');
+        // Funktion zur Erstellung von Fallback-Namen
+        const createFallbackName = (type, index, device) => {
+            if (device.label && device.label.trim() !== '' && device.label !== type) {
+                return device.label; // Echtes Label verwenden, wenn vorhanden
+            }
+            return `${type} ${index + 1}`; // Fallback: "Kamera 1", "Mikrofon 1" etc.
+        };
+
+        // Video-Dropdown befüllen
+        videoSelect.innerHTML = videoDevices.length > 0
+            ? videoDevices.map((device, index) =>
+                `<option value="${device.deviceId}">${createFallbackName('Kamera', index, device)}</option>`
+              ).join('')
+            : '<option value="">Keine Kamera verfügbar</option>';
+
+        // Audio-Dropdown befüllen
+        audioSelect.innerHTML = audioDevices.length > 0
+            ? audioDevices.map((device, index) =>
+                `<option value="${device.deviceId}">${createFallbackName('Mikrofon', index, device)}</option>`
+              ).join('')
+            : '<option value="">Kein Mikrofon verfügbar</option>';
 
         const settings = loadSettings();
         if (settings && settings.videoDeviceId && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
