@@ -27,7 +27,7 @@ main {
     grid-template-rows: 1fr auto;
     grid-auto-flow: row;
     grid-row-gap: 0px;
-    grid-column-gap: 8px;
+    grid-column-gap: 0;
     height: 100vh;
     position: relative;
     overflow: hidden;
@@ -105,13 +105,19 @@ main video {
     grid-row-gap: 4px;
     height: 100%;
     overflow-y: auto;
+    padding: 0 10px;
+}
+
+#sidebar-right .title {
+    font-size: .9rem;
+    padding: 8px 0 5px;
 }
 
 #log {
     overflow: scroll;
     max-width: 100%;
     font-family: monospace;
-    font-size: 0.8rem;
+    font-size: .75rem;
     white-space: nowrap;
 }
 
@@ -155,23 +161,36 @@ main video {
 }
 
 
-#connection {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+#devices label {
+    display: none !important;
 }
 
-#connection h2 {
-    font-size: 1.2rem;
-    margin: 0;
+#devices > div {
+    display: flex;
+    flex-direction: row;
+    gap: 3px;
+}
+
+#devices input,
+#devices select {
+    padding: 3px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+#connection > div {
+    display: flex;
+    flex-direction: row;
+    gap: 3px;
 }
 
 #connection label {
-    font-weight: bold;
+    display: none !important;
 }
 
 #connection input {
-    padding: 5px;
+    padding: 3px;
     width: 100%;
     box-sizing: border-box;
 }
@@ -179,13 +198,14 @@ main video {
 #connection button {
     padding: 5px 10px;
     background-color: #4CAF50;
-    color: white;
+    color: black;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
+    width: 100%;
 }
 
 #connection button:disabled {
@@ -198,44 +218,53 @@ main video {
 }
 
 .throbber {
-    width: 16px;
-    height: 16px;
+    width: 30px;
+    height: auto;
 }
 
-/* KI STUFF */
-
-video { width: 300px; border: 1px solid #ccc; }
-
-
+/* File Transfer List */
 
 #fileList {
-    border: 1px solid #ccc;
+    position: relative;
     min-height: 100px;
-    padding: 10px;
-    margin-top: 10px;
-    background: #f9f9f9;
+    border: 1px solid #ccc;
 }
+
 #fileList.dragover {
     background: #e0e0e0;
 }
-.file-item {
+
+#fileList .file-item {
     padding: 5px;
     display: flex;
     align-items: center;
     position: relative;
+    white-space: pre;
+    font-size: .9rem;
+    margin-bottom: 1px;
 }
-.file-item.sent {
-    background: #d4edda;
+
+#fileList .file-item.sent {
+    background: #9f3131;
 }
-.file-item.received {
-    background: #cce5ff;
+
+#fileList .file-item.received {
+    background: #198238;
 }
-.file-item a {
+
+#fileList .file-item a {
     color: inherit;
     text-decoration: underline;
     margin-left: 5px;
 }
-.file-item .progress-container {
+
+#fileList .icon {
+    width: 16px;
+    height: auto;
+    filter: invert(1);
+}
+
+#fileList .file-item .progress-container {
     width: 100%;
     background: #ddd;
     height: 10px;
@@ -244,16 +273,28 @@ video { width: 300px; border: 1px solid #ccc; }
     left: 0;
     display: none;
 }
-.file-item .progress-bar {
+
+#fileList .file-item .progress-bar {
     height: 100%;
     background: #4caf50;
     width: 0;
     transition: width 0.3s;
 }
-.file-item .progress-text {
+
+#fileList .file-item .progress-text {
     position: absolute;
     top: -20px;
     right: 5px;
     font-size: 12px;
     color: #333;
+}
+
+#fileList > p {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    font-size: .8rem;
+    z-index: 5;
+    margin: 0;
+    font-style: italic;
 }

@@ -7,7 +7,6 @@
     <link rel="stylesheet" type="text/css" href="css/main.css">
     <link rel="stylesheet" type="text/css" href="css/piano.css">
     <link rel="stylesheet" type="text/css" href="css/metronome.css">
-    <link rel="stylesheet" type="text/css" href="css/font-awesome.min.css">
 </head>
 <body>
     <main>
@@ -20,19 +19,20 @@
         </section>
         <section id="sidebar-right">
             <section id="connection">
-                <h2>Verbindung</h2>
-                <label for="serverIp">Server IP:</label>
-                <input type="text" id="serverIp" placeholder="z.B. localhost">
-                <label for="serverPort">Server Port:</label>
-                <input type="text" id="serverPort" placeholder="z.B. 8080">
-                <button id="startConnection">Start</button>
+                <div class="title">Connection</div>
+                <div>
+                    <label for="serverIp">Server IP:</label>
+                    <input type="text" id="serverIp" placeholder="IP">
+                    <label for="serverPort">Server Port:</label>
+                    <input type="number" id="serverPort" placeholder="Port">
+                    <button id="startConnection">Start</button>
+                </div>
             </section>
-            <section>
+            <section id="devices">
+                <div class="title">Devices</div>
                 <div>
                     <label for="videoSelect">Kamera:</label>
                     <select id="videoSelect"></select>
-                </div>
-                <div>
                     <label for="audioSelect">Mikrofon:</label>
                     <select id="audioSelect"></select>
                 </div>
@@ -43,19 +43,18 @@
                 <div>
                     <label for="midiSelect">MIDI-Eingang:</label>
                     <select id="midiSelect"></select>
-                </div>
-                <div>
                     <label for="midiOutputSelect">MIDI-Ausgang:</label>
                     <select id="midiOutputSelect"></select>
                 </div>
             </section>
             <section>
-                <div id="fileList" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
-                    <p>Dateien hierher ziehen oder fallen lassen</p>
+                <div class="title">Filesharing</div>
+                <div id="fileList">
+                    <p>Drop file here</p>
                 </div>
             </section>
             <section id="chat">
-                <h2>Chat</h2>
+                <div class="title">Chat</div>
                 <div id="chat-msgs" role="log" aria-live="polite"></div>
                 <form id="chat-form" aria-label="Chat-Nachrichten senden">
                     <label for="messageInput">Nachricht:</label>
@@ -64,6 +63,8 @@
                 </form>
             </section>
             <section id="log">
+                <div class="title">Log</div>
+                <div id="log-msgs"></div>
             </section>
         </section>
         <section id="piano"></section>

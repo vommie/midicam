@@ -5,7 +5,7 @@ import { CamLocalDrag } from "./camLocalDrag.js";
 // Grundsetup
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
-const log = document.getElementById('log');
+const log = document.getElementById('log-msgs');
 const chat = document.getElementById('chat-msgs');
 const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
@@ -393,7 +393,7 @@ async function startConnection() {
 
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
-    startConnectionButton.innerHTML = 'Warte auf Gegenseite ... <img src="assets/throbber.gif" alt="Warten" class="throbber">';
+    startConnectionButton.innerHTML = 'Warte <img src="assets/throbber.gif" alt="Warten" class="throbber">';
     serverIpInput.disabled = true;
     serverPortInput.disabled = true;
 
@@ -429,7 +429,6 @@ async function startConnection() {
             await pc.setLocalDescription(answer);
             ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
             addLog('Answer gesendet, Junge!');
-            // Verarbeite gepufferte Candidates
             while (pendingIceCandidates.length > 0) {
                 const candidate = pendingIceCandidates.shift();
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -438,7 +437,6 @@ async function startConnection() {
         } else if (msg.type === 'answer') {
             await pc.setRemoteDescription(new RTCSessionDescription(msg));
             addLog('Answer empfangen, Junge!');
-            // Verarbeite gepufferte Candidates
             while (pendingIceCandidates.length > 0) {
                 const candidate = pendingIceCandidates.shift();
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -502,7 +500,8 @@ async function startConnection() {
             enableFileSharing();
             connectMidi();
             startConnectionButton.disabled = false;
-            startConnectionButton.style.backgroundColor = '#ff4444';
+            startConnectionButton.style.backgroundColor = '#9D1919';
+            startConnectionButton.style.color = '#ffffff';
             startConnectionButton.innerHTML = 'Verbindung trennen';
             serverIpInput.style.display = 'none';
             serverPortInput.style.display = 'none';
@@ -524,16 +523,15 @@ async function startConnection() {
         addLog('Offer gesendet, Junge!');
     } catch (err) {
         addLog(`Fehler bei Offer: ${err}`);
-        resetConnectionUI();
     }
 
     saveSettings();
-}
+};
 
 // Verbindung trennen
 function disconnect() {
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'disconnect-all' })); // Server anweisen, alle Clients zu trennen
+        ws.send(JSON.stringify({ type: 'disconnect-all' }));
         addLog('Disconnect-All gesendet, Junge!');
     }
     if (pc) {
@@ -653,7 +651,7 @@ function setupFileChannel(channel) {
                 if (fileInfo.receivedBytes === fileInfo.totalBytes) {
                     const fileData = new Blob(fileInfo.chunks);
                     finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                    addLog(`Datei komplett empfangen: ${info.fileName}`);
+                    addLog(`Datei komplett empfangen: ${fileInfo.fileName}`);
                     fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
                     activeReceives.delete(fileId);
                 }
@@ -675,18 +673,18 @@ function setupFileChannel(channel) {
 
 // Filesharing aktivieren/deaktivieren
 function enableFileSharing() {
-    fileList.style.backgroundColor = 'transparent';
+    fileList.style.backgroundColor = '#0F0F0F';
     fileList.style.opacity = '1';
     fileList.style.pointerEvents = 'auto';
-    fileList.querySelector('p').textContent = 'Dateien hierher ziehen oder fallen lassen';
+    fileList.querySelector('p').textContent = 'Drop file here';
     addLog('Filesharing aktiviert, Junge!');
 }
 
 function disableFileSharing() {
-    fileList.style.backgroundColor = '#e0e0e0';
+    fileList.style.backgroundColor = 'transparent';
     fileList.style.opacity = '0.5';
     fileList.style.pointerEvents = 'none';
-    fileList.querySelector('p').textContent = 'Filesharing nicht verfügbar - Verbindung erforderlich';
+    fileList.querySelector('p').textContent = 'Filesharing unavailable without connection';
     addLog('Filesharing deaktiviert, Junge!');
 }
 
@@ -753,14 +751,20 @@ function addFileToList(fileName, fileType, fileData, isSent, showProgress = fals
     const fileItem = document.createElement('div');
     fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
 
-    const icon = document.createElement('i');
-    icon.classList.add('fa', getFileIcon(fileType));
+    const direction = document.createElement('span');
+    direction.classList.add('direction')
+    direction.textContent = isSent ? '⬆' : '⬇';
+    fileItem.appendChild(direction);
+
+    const icon = document.createElement('img');
+    icon.classList.add('icon')
+    icon.src = 'assets/' + getFileIcon(fileType);
     fileItem.appendChild(icon);
 
     const fileLink = document.createElement('a');
     fileLink.href = '#';
-    fileLink.textContent = `${fileName} (${isSent ? 'Gesendet' : 'Empfangen'})`;
-    fileLink.style.color = isSent ? '#155724' : '#004085';
+    fileLink.textContent = fileName;
+    fileLink.style.color = isSent ? 'white' : 'white';
     fileLink.style.textDecoration = 'underline';
     fileLink.onclick = (e) => {
         e.preventDefault();
@@ -825,15 +829,15 @@ function handleFileOpen(fileName, fileType, url) {
     }
 }
 
-// MIME-Type zu Font Awesome Icon
+// MIME-Type zu Icon
 function getFileIcon(fileType) {
-    if (fileType.startsWith('image/')) return 'fa-file-image';
-    if (fileType === 'application/pdf') return 'fa-file-pdf';
-    if (fileType.startsWith('text/')) return 'fa-file-alt';
-    if (fileType.startsWith('audio/')) return 'fa-file-audio';
-    if (fileType.startsWith('video/')) return 'fa-file-video';
-    if (fileType === 'application/zip' || fileType === 'application/x-rar-compressed') return 'fa-file-archive';
-    return 'fa-file';
+    if (fileType.startsWith('image/')) return 'file_image.svg';
+    if (fileType === 'application/pdf') return 'file_pdf.svg';
+    if (fileType.startsWith('text/')) return 'file_text.svg';
+    if (fileType.startsWith('audio/')) return 'file_audio.svg';
+    if (fileType.startsWith('video/')) return 'file_video.svg';
+    if (fileType === 'application/zip' || fileType === 'application/x-rar-compressed') return 'file_archive.svg';
+    return 'file_generic.svg';
 }
 
 // Chat-Nachricht senden
