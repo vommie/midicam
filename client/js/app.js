@@ -53,8 +53,8 @@ function addChatMessage(msg) {
 // URL parsen, um serverIp und serverPort zu extrahieren
 function parseServerUrl(url) {
     try {
-        // Entferne "ws://" oder "wss://" falls vorhanden, da wir sie später hinzufügen
-        const cleanUrl = url.replace(/^wss?:\/\//i, '');
+        // Entferne Protokolle falls vorhanden, da wir sie später hinzufügen
+        const cleanUrl = url.replace(/^wss?:\/\//i, '').replace(/^https?:\/\//i, '');
         const urlObj = new URL(`http://${cleanUrl}`); // http:// als Dummy-Protokoll, wird später ersetzt
         const hostname = urlObj.hostname;
         const port = urlObj.port || '8080'; // Standard-Port 8080, wenn keiner angegeben
