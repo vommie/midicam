@@ -14,8 +14,7 @@ const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
-const serverIpInput = document.getElementById('serverIp');
-const serverPortInput = document.getElementById('serverPort');
+const serverUrlInput = document.getElementById('serverUrl'); // Neues Feld
 const startConnectionButton = document.getElementById('startConnection');
 let pc;
 let midiChannel;
@@ -42,13 +41,28 @@ function addLog(msg) {
     const line = document.createElement('div');
     line.textContent += `${msg}`;
     log.appendChild(line);
-    log.scrollTop = log.scrollHeight; // Auto-Scroll zum neuesten Log
+    log.scrollTop = log.scrollHeight;
 }
 
 // Chat-Nachricht anzeigen
 function addChatMessage(msg) {
     chat.textContent += `${msg}\n`;
     chat.scrollTop = chat.scrollHeight;
+}
+
+// URL parsen, um serverIp und serverPort zu extrahieren
+function parseServerUrl(url) {
+    try {
+        // Entferne "ws://" oder "wss://" falls vorhanden, da wir sie später hinzufügen
+        const cleanUrl = url.replace(/^wss?:\/\//i, '');
+        const urlObj = new URL(`http://${cleanUrl}`); // http:// als Dummy-Protokoll, wird später ersetzt
+        const hostname = urlObj.hostname;
+        const port = urlObj.port || '8080'; // Standard-Port 8080, wenn keiner angegeben
+        return { serverIp: hostname, serverPort: port };
+    } catch (err) {
+        addLog(`Fehler beim Parsen der URL: ${err.message}`);
+        return null;
+    }
 }
 
 // Einstellungen im localStorage speichern
@@ -59,8 +73,7 @@ function saveSettings() {
         micVolume: micVolume.value,
         midiDeviceId: midiSelect.value,
         midiOutputDeviceId: midiOutputSelect.value,
-        serverIp: serverIpInput.value,
-        serverPort: serverPortInput.value
+        serverUrl: serverUrlInput.value // Speichere die volle URL
     };
     localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
     addLog('Einstellungen gespeichert.');
@@ -71,11 +84,10 @@ function loadSettings() {
     const savedSettings = localStorage.getItem('midiCamDiggaSettings');
     if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        serverIpInput.value = settings.serverIp || 'localhost';
-        serverPortInput.value = settings.serverPort || '8080';
+        serverUrlInput.value = settings.serverUrl || 'http://localhost:8080'; // Standard-URL
         return settings;
     }
-    return { serverIp: 'localhost', serverPort: '8080' };
+    return { serverUrl: 'http://localhost:8080' };
 }
 
 // Geräte auflisten und Dropdowns befüllen
@@ -413,26 +425,31 @@ async function startConnection() {
         }
     }
 
-    const serverIp = serverIpInput.value.trim();
-    const serverPort = serverPortInput.value.trim();
-    if (!serverIp || !serverPort) {
-        addLog('IP oder Port fehlt. Gib mal was ein!');
+    const serverUrl = serverUrlInput.value.trim();
+    if (!serverUrl) {
+        addLog('Server-URL fehlt. Gib mal was ein!');
         resetConnectionUI();
         return;
     }
 
+    const parsed = parseServerUrl(serverUrl);
+    if (!parsed) {
+        addLog('Ungültige Server-URL. Format: http://<ip>:<port> oder https://<domain>');
+        resetConnectionUI();
+        return;
+    }
+    const { serverIp, serverPort } = parsed;
+
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
     startConnectionButton.innerHTML = 'Warte <img src="assets/throbber.gif" alt="Warten" class="throbber">';
-    serverIpInput.disabled = true;
-    serverPortInput.disabled = true;
+    serverUrlInput.disabled = true;
 
     pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
-    let pendingIceCandidates = []; // Puffer für ICE-Candidates
+    let pendingIceCandidates = [];
 
-    // Tracks hinzufügen und sicherstellen, dass sie bereit sind
     const trackPromises = localStream.getTracks().map(track => {
         addLog(`Track hinzufüge: ${track.kind}`);
         return pc.addTrack(track, localStream);
@@ -440,7 +457,9 @@ async function startConnection() {
     await Promise.all(trackPromises);
     addLog('Alle Tracks hinzugefügt.');
 
-    ws = new WebSocket(`ws://${serverIp}:${serverPort}`);
+    // WebSocket mit ws:// oder wss:// basierend auf der Eingabe
+    const protocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
+    ws = new WebSocket(`${protocol}://${serverIp}:${serverPort}`);
 
     ws.onopen = async () => {
         addLog('WebSocket offen.');
@@ -540,10 +559,8 @@ async function startConnection() {
             startConnectionButton.style.backgroundColor = '#9D1919';
             startConnectionButton.style.color = '#ffffff';
             startConnectionButton.innerHTML = 'Verbindung trennen';
-            serverIpInput.style.display = 'none';
-            serverPortInput.style.display = 'none';
-            document.querySelector('label[for="serverIp"]').style.display = 'none';
-            document.querySelector('label[for="serverPort"]').style.display = 'none';
+            serverUrlInput.style.display = 'none';
+            document.querySelector('label[for="serverUrl"]').style.display = 'none';
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
@@ -620,12 +637,9 @@ function resetConnectionUI() {
     startConnectionButton.disabled = false;
     startConnectionButton.style.backgroundColor = '#4CAF50';
     startConnectionButton.innerHTML = 'Start';
-    serverIpInput.disabled = false;
-    serverPortInput.disabled = false;
-    serverIpInput.style.display = 'block';
-    serverPortInput.style.display = 'block';
-    document.querySelector('label[for="serverIp"]').style.display = 'block';
-    document.querySelector('label[for="serverPort"]').style.display = 'block';
+    serverUrlInput.disabled = false;
+    serverUrlInput.style.display = 'block';
+    document.querySelector('label[for="serverUrl"]').style.display = 'block';
 }
 
 // MIDI DataChannel-Setup

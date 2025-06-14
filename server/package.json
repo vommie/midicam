@@ -4,11 +4,12 @@
     "description": "Signaling-Server für KameraKlangz WebRTC",
     "main": "server.js",
     "scripts": {
-      "start": "node server.js"
+        "start": "node server.js"
     },
     "dependencies": {
-      "ws": "^8.16.0"
+        "tunnelmole": "^2.3.7",
+        "ws": "^8.16.0"
     },
     "author": "Dein Digga",
     "license": "MIT"
-  }
+}

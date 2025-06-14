@@ -186,7 +186,7 @@ main video {
 }
 
 #connection label {
-    display: none !important;
+    display: none !important; /* Label bleibt unsichtbar, aber für Screenreader verfügbar */
 }
 
 #connection input {
@@ -205,7 +205,7 @@ main video {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    width: 100%;
+    width: 100%; /* Button nimmt volle Breite ein */
 }
 
 #connection button:disabled {
