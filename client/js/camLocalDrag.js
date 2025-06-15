@@ -46,6 +46,7 @@ class CamLocalDrag {
     addEventListeners() {
         this.localVideo.addEventListener('mousedown', (e) => {
             this.isDragging = true;
+            this.localVideoWrapper.style.cursor = 'move';
             const rect = this.localVideoWrapper.getBoundingClientRect();
             this.startX = (window.innerWidth - e.clientX) - parseInt(this.localVideoWrapper.style.right);
             this.startY = e.clientY - rect.top;
@@ -54,6 +55,7 @@ class CamLocalDrag {
 
         this.localVideo.addEventListener('touchstart', (e) => {
             this.isDragging = true;
+            this.localVideoWrapper.style.cursor = 'move';
             const touch = e.touches[0];
             const rect = this.localVideoWrapper.getBoundingClientRect();
             this.startX = (window.innerWidth - touch.clientX) - parseInt(this.localVideoWrapper.style.right);
@@ -144,18 +146,17 @@ class CamLocalDrag {
             this.triggerChangeEvent('position', { right, top });
         });
 
-        this.localVideoWrapper.addEventListener('mousemove', (e) => {
+        this.localVideoWrapper.addEventListener('mouseup', (e) => {
             const rect = this.localVideoWrapper.getBoundingClientRect();
             const resizeAreaSize = 15;
             const inResizeArea =
                 e.clientX >= rect.right - resizeAreaSize &&
                 e.clientY >= rect.bottom - resizeAreaSize;
-
-            this.localVideoWrapper.style.cursor = inResizeArea ? 'nw-resize' : 'move';
+            this.localVideoWrapper.style.cursor = inResizeArea ? 'nw-resize' : 'grab';
         });
 
         this.localVideoWrapper.addEventListener('mouseleave', () => {
-            this.localVideoWrapper.style.cursor = 'move';
+            this.localVideoWrapper.style.cursor = 'grab';
         });
 
         this.localVideoWrapper.addEventListener('videoChange', (e) => {
