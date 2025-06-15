@@ -37,14 +37,20 @@
                     <select id="audioSelect"></select>
                 </div>
                 <div>
-                    <label for="micVolume">Mikrofon-Lautstärke:</label>
-                    <input type="range" id="micVolume" min="0" max="1" step="0.1" value="1">
-                </div>
-                <div>
                     <label for="midiSelect">MIDI-Eingang:</label>
                     <select id="midiSelect"></select>
                     <label for="midiOutputSelect">MIDI-Ausgang:</label>
                     <select id="midiOutputSelect"></select>
+                </div>
+                <div class="volume-controls-container">
+                    <div class="volume-control" title="Your microphone volume">
+                        <img src="assets/volume_locale.svg">
+                        <input type="range" id="micVolume" min="0" max="1" step="0.05" value="1">
+                    </div>
+                    <div class="volume-control" title="Remote user volume">
+                        <img src="assets/volume_remote.svg">
+                        <input type="range" id="remoteVolume" min="0" max="1" step="0.05" value="1">
+                    </div>
                 </div>
             </section>
             <section>

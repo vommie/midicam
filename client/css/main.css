@@ -185,6 +185,17 @@ video:fullscreen {
     box-sizing: border-box;
 }
 
+#devices .volume-control {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    width: 100%;
+    align-items: center;
+}
+
+#devices .volume-control img {
+    width: 100%;
+    height: auto;
+}
 
 #connection > div {
     display: flex;

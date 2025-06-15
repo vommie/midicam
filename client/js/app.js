@@ -12,6 +12,7 @@ const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
+const remoteVolume = document.getElementById('remoteVolume');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
@@ -77,6 +78,7 @@ function saveSettings() {
         videoDeviceId: videoSelect.value,
         audioDeviceId: audioSelect.value,
         micVolume: micVolume.value,
+        remoteVolume: remoteVolume.value,
         midiDeviceId: midiSelect.value,
         midiOutputDeviceId: midiOutputSelect.value,
         serverUrl: serverUrlInput.value
@@ -135,6 +137,8 @@ async function populateDeviceOptions() {
             audioSelect.value = audioDevices[0]?.deviceId || '';
         }
         micVolume.value = settings?.micVolume || '1';
+        remoteVolume.value = settings?.remoteVolume || '1';
+        remoteVideo.volume = remoteVolume.value;
 
         currentVideoId = videoSelect.value;
         currentAudioId = audioSelect.value;
@@ -314,6 +318,12 @@ function adjustMicVolume() {
         addLog(`Mikrofon-Lautstärke auf ${micVolume.value} gesetzt.`);
         saveSettings();
     }
+}
+
+function adjustRemoteVolume() {
+    remoteVideo.volume = parseFloat(remoteVolume.value);
+    addLog(`Remote-Lautstärke auf ${remoteVolume.value} gesetzt.`);
+    saveSettings();
 }
 
 async function connectMidi() {
@@ -942,6 +952,7 @@ function setEventListeners() {
     document.querySelector('#videoSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#micVolume').addEventListener('input', () => adjustMicVolume());
+    remoteVolume.addEventListener('input', adjustRemoteVolume);
 
     startConnectionButton.addEventListener('click', () => {
         if (startConnectionButton.innerHTML.includes('Verbindung trennen')) {

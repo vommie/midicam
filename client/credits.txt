@@ -2,3 +2,4 @@ file_success.wav: https://freesound.org/people/GabrielAraujo/sounds/242501/
 file_error.wav: https://freesound.org/people/tcpp/sounds/151309/
 file icons: https://www.svgrepo.com/collection/doodle-icons/
 favicon: https://www.svgrepo.com/svg/513232/piano
+volume_locale.svg / volume_remote.svg: https://www.svgrepo.com/svg/535722/volume-high
