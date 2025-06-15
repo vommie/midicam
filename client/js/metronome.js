@@ -2,10 +2,12 @@ class Metronome {
     constructor(opts) {
         this.opts = opts;
         this.onStateChange = opts.onStateChange || (() => {});
+        this.onTick = opts.onTick || (() => {});
         this.audioContext = opts.audioContext;
         this.soundBuffer = null;
 
         this.elements = {};
+        this.isMaster = false;
         this.isPlaying = false;
         this.currentBeat = 0;
 
@@ -13,8 +15,6 @@ class Metronome {
         this.lookahead = 25.0;
         this.scheduleAheadTime = 0.1;
         this.schedulerTimer = null;
-
-        this.isMutedByRemote = false;
 
         this.gainNode = this.audioContext.createGain();
         this.gainNode.connect(this.audioContext.destination);
@@ -37,9 +37,7 @@ class Metronome {
     }
 
     playSound(time) {
-        if (!this.soundBuffer) return;
-        if (this.gainNode.gain.value === 0) return;
-
+        if (!this.soundBuffer || this.gainNode.gain.value === 0) return;
         const source = this.audioContext.createBufferSource();
         source.buffer = this.soundBuffer;
         source.connect(this.gainNode);
@@ -47,69 +45,78 @@ class Metronome {
     }
 
     scheduler() {
+        if (!this.isMaster || !this.isPlaying) return;
+
         while (this.nextBeatTime < this.audioContext.currentTime + this.scheduleAheadTime) {
             this.playSound(this.nextBeatTime);
-            this.scheduleVisualUpdate(this.nextBeatTime);
+            this.scheduleVisualUpdate(this.nextBeatTime, this.currentBeat);
+
+            this.onTick({
+                beat: this.currentBeat,
+                nextBeatTime: this.nextBeatTime,
+                masterAudioTimeNow: this.audioContext.currentTime
+            });
 
             const beatsPerMeasure = parseInt(this.elements.beatsInput.value);
-            this.currentBeat = this.currentBeat % beatsPerMeasure + 1;
-
-            const secondsPerBeat = 60.0 / this.getTempo('bpm');
-            this.nextBeatTime += secondsPerBeat;
+            this.currentBeat = (this.currentBeat % beatsPerMeasure) + 1;
+            this.nextBeatTime += 60.0 / this.getTempo('bpm');
         }
         this.schedulerTimer = setTimeout(() => this.scheduler(), this.lookahead);
     }
 
-    scheduleVisualUpdate(time) {
+    handleMasterTick(data) {
+        if (this.isMaster || !this.isPlaying) return;
+        const timeToNextBeat = data.nextBeatTime - data.masterAudioTimeNow;
+        const scheduledTime = this.audioContext.currentTime + timeToNextBeat;
+        this.playSound(scheduledTime);
+        this.scheduleVisualUpdate(scheduledTime, data.beat);
+    }
+
+    scheduleVisualUpdate(time, beatToVisualize) {
         const scheduleTime = (time - this.audioContext.currentTime) * 1000;
-        const beatToVisualize = this.currentBeat;
         setTimeout(() => this.setBeatVisual(beatToVisualize), scheduleTime);
     }
 
-    start(syncState = null) {
-        if (this.isPlaying) return;
+    start() {
         if (this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
         this.isPlaying = true;
-        this.elements.playBtn.classList.remove('paused');
+        this.updatePlayButtonVisuals();
 
-        const secondsPerBeat = 60.0 / this.getTempo('bpm');
-
-        if (syncState && syncState.perfStartTime > 0) {
-            const timeElapsedOnSenderPerf = (performance.now() - syncState.perfStartTime) / 1000.0;
-            const senderAudioTimeNow = syncState.audioStartTime + timeElapsedOnSenderPerf;
-
-            const timeSinceSenderStart = senderAudioTimeNow - syncState.audioStartTime;
-            const beatsPassedOnSender = Math.floor(timeSinceSenderStart / secondsPerBeat);
-            const timeOfNextBeatOnSender = syncState.audioStartTime + (beatsPassedOnSender + 1) * secondsPerBeat;
-
-            this.nextBeatTime = this.audioContext.currentTime + (timeOfNextBeatOnSender - senderAudioTimeNow);
-            this.currentBeat = (beatsPassedOnSender % parseInt(this.elements.beatsInput.value)) + 1;
-
-        } else {
+        if (this.isMaster) {
             this.currentBeat = 1;
             this.nextBeatTime = this.audioContext.currentTime + 0.05;
+            this.scheduler();
         }
-
-        this.scheduler();
     }
 
     pause() {
-        if (!this.isPlaying) return;
         this.isPlaying = false;
-        this.elements.playBtn.classList.add('paused');
-        clearTimeout(this.schedulerTimer);
-        this.schedulerTimer = null;
+        this.updatePlayButtonVisuals();
         this.elements.beatVisuals.forEach(visual => visual.classList.remove('active'));
+
+        if (this.isMaster) {
+            clearTimeout(this.schedulerTimer);
+            this.schedulerTimer = null;
+        }
     }
 
-    changeTempo() {
+    setMaster(isMaster) {
+        this.isMaster = isMaster;
+        const container = this.elements.container.parentElement;
+        container.classList.toggle('master', this.isMaster);
+        container.classList.toggle('slave', !this.isMaster);
         if (this.isPlaying) {
             this.pause();
             this.start();
         }
-        this.notifyStateChange();
+    }
+
+    claimMastership() {
+        if (this.isMaster) return;
+        this.setMaster(true);
+        this.notifyStateChange(true);
     }
 
     setBeatVisual(beatNumber) {
@@ -148,7 +155,15 @@ class Metronome {
         this.elements.beatVisualsContainer = container.querySelector('#beat-visuals');
         this.elements.volumeSlider = container.querySelector('#metronomeVolume');
         this.elements.volumeIcon = container.querySelector('#metronomeVolumeIcon');
-        this.changeBeatVisualsAmount(beats);
+        this.updateBeatVisualsAmount(beats);
+    }
+
+    updatePlayButtonVisuals() {
+        if (this.isPlaying) {
+            this.elements.playBtn.classList.remove('paused');
+        } else {
+            this.elements.playBtn.classList.add('paused');
+        }
     }
 
     adjustTempoNameFontSize() {
@@ -167,7 +182,6 @@ class Metronome {
             el.style.fontSize = `${currentSize}px`;
         }
     }
-
 
     addEventListeners() {
         [this.elements.bpmInput, this.elements.beatsInput].forEach(input => {
@@ -188,30 +202,30 @@ class Metronome {
             this.elements.bpmName.textContent = this.getTempoName(bpm);
             localStorage.setItem('metronomeBpm', bpm);
             this.adjustTempoNameFontSize();
-            this.changeTempo();
-        });
-
-        this.elements.playBtn.addEventListener('click', () => {
-            if (this.elements.playBtn.classList.contains('paused')) this.start();
-            else this.pause();
             this.notifyStateChange();
         });
 
         this.elements.beatsInput.addEventListener('input', () => {
             const beats = parseInt(this.elements.beatsInput.value);
             localStorage.setItem('metronomeBeats', beats);
-            this.changeBeatVisualsAmount(beats);
-            this.changeTempo();
+            this.updateBeatVisualsAmount(beats);
+            this.notifyStateChange();
+        });
+
+        this.elements.playBtn.addEventListener('click', () => {
+            if (this.isPlaying) {
+                this.pause();
+            } else {
+                this.start();
+            }
+            this.notifyStateChange();
         });
 
         this.elements.volumeSlider.addEventListener('input', () => {
-            this.isMutedByRemote = false;
             this.adjustVolume();
             this.lastVolume = this.elements.volumeSlider.value;
         });
-
         this.elements.volumeIcon.addEventListener('click', () => {
-            this.isMutedByRemote = false;
             if (parseFloat(this.elements.volumeSlider.value) > 0) {
                 this.lastVolume = this.elements.volumeSlider.value;
                 this.elements.volumeSlider.value = 0;
@@ -222,19 +236,60 @@ class Metronome {
         });
     }
 
+    setState(state, isFromMasterClaim) {
+        if (isFromMasterClaim) {
+            this.setMaster(false);
+        }
+        if (this.elements.bpmInput.value != state.bpm) {
+            this.elements.bpmInput.value = state.bpm;
+            this.elements.bpmName.textContent = this.getTempoName(state.bpm);
+            localStorage.setItem('metronomeBpm', state.bpm);
+            this.adjustTempoNameFontSize();
+        }
+        if (this.elements.beatsInput.value != state.beats) {
+            this.elements.beatsInput.value = state.beats;
+            localStorage.setItem('metronomeBeats', state.beats);
+            this.updateBeatVisualsAmount(state.beats);
+        }
+        if (this.isPlaying !== state.isPlaying) {
+            if (state.isPlaying) {
+                this.start();
+            } else {
+                this.pause();
+            }
+        } else if (this.isPlaying && this.isMaster) {
+            this.pause();
+            this.start();
+        }
+    }
+
+    notifyStateChange(isClaimingMaster = false) {
+        this.onStateChange(this.getState(), isClaimingMaster);
+    }
+
+    updateBeatVisualsAmount(beats) {
+        if (this.elements.beatVisuals && this.elements.beatVisuals.length === beats) return;
+        let beatsHtml = '';
+        for (let i = 1; i <= beats; i++) {
+            beatsHtml = `${beatsHtml}<div class="beat-visual" data-id="${i}"></div>`;
+        }
+        this.elements.beatVisualsContainer.innerHTML = beatsHtml;
+        this.elements.beatVisuals = this.elements.beatVisualsContainer.querySelectorAll('.beat-visual');
+    }
+
+    getState() {
+        return {
+            bpm: parseInt(this.elements.bpmInput.value),
+            beats: parseInt(this.elements.beatsInput.value),
+            isPlaying: this.isPlaying,
+        };
+    }
+
     adjustVolume(save = true) {
-        const oldMuteState = this.gainNode.gain.value === 0;
         const volume = parseFloat(this.elements.volumeSlider.value);
         this.gainNode.gain.value = volume;
         this.elements.volumeIcon.classList.toggle('muted', volume === 0);
-        const newMuteState = volume === 0;
-
-        if (save) {
-            localStorage.setItem('metronomeVolume', volume);
-            if (oldMuteState !== newMuteState && !this.isMutedByRemote) {
-                this.notifyStateChange();
-            }
-        }
+        if (save) localStorage.setItem('metronomeVolume', volume);
     }
 
     insertInto(containerElement) {
@@ -257,13 +312,14 @@ class Metronome {
             bpm: parseInt(this.elements.bpmInput.value),
             beats: parseInt(this.elements.beatsInput.value),
             isPlaying: this.isPlaying,
-            isMuted: parseFloat(this.elements.volumeSlider.value) === 0,
-            audioStartTime: this.isPlaying ? this.nextBeatTime - (60.0 / this.getTempo('bpm')) : 0,
-            perfStartTime: this.isPlaying ? performance.now() : 0,
         };
     }
 
-    setState(state) {
+    setState(state, isFromMasterClaim) {
+        if (isFromMasterClaim) {
+            this.setMaster(false);
+        }
+
         const bpmChanged = this.elements.bpmInput.value != state.bpm;
         if (bpmChanged) {
             this.elements.bpmInput.value = state.bpm;
@@ -279,23 +335,14 @@ class Metronome {
             localStorage.setItem('metronomeBeats', state.beats);
         }
 
-        const localVolume = parseFloat(this.elements.volumeSlider.value);
-        const isCurrentlyMuted = this.gainNode.gain.value === 0;
-        if (state.isMuted !== isCurrentlyMuted) {
-            this.isMutedByRemote = true;
-            this.gainNode.gain.value = state.isMuted ? 0 : localVolume;
-            this.elements.volumeIcon.classList.toggle('muted', state.isMuted);
-        }
-
         const playingChanged = this.isPlaying !== state.isPlaying;
         if (playingChanged || (this.isPlaying && (bpmChanged || beatsChanged))) {
-            if (this.isPlaying) this.pause();
-            if (state.isPlaying) this.start(state);
+            if (state.isPlaying) this.start(); else this.pause();
         }
     }
 
-    notifyStateChange() {
-        this.onStateChange(this.getState());
+    notifyStateChange(isClaimingMaster = false) {
+        this.onStateChange(this.getState(), isClaimingMaster);
     }
 
     changeBeatVisualsAmount(beats) {

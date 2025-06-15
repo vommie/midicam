@@ -633,7 +633,7 @@ function resetConnectionUI() {
 
     toggleMetronomeButton.disabled = true;
     toggleMetronomeButton.classList.remove('active');
-    metronomeContainer.classList.remove('visible');
+    metronomeContainer.classList.remove('visible', 'master', 'slave');
     isMetronomeVisible = false;
     if (metronome) {
         metronome.pause();
@@ -674,23 +674,36 @@ function setupChatChannel(channel) {
 function setupMetronomeChannel(channel) {
     channel.onopen = () => {
         addLog('Metronome data channel opened.');
-        sendMetronomeState();
+        if(isMetronomeVisible) {
+             sendMetronomeState();
+        }
     };
     channel.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'metronome_sync') {
             addLog(`Metronome sync received: ${JSON.stringify(msg.data)}`);
-            isMetronomeVisible = msg.data.visible;
-            metronomeContainer.classList.toggle('visible', isMetronomeVisible);
-            toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
-            metronome.setState(msg.data, true);
+            const remoteIsVisible = msg.data.visible;
+
+            if (!isMetronomeVisible && remoteIsVisible) {
+                isMetronomeVisible = true;
+                metronomeContainer.classList.add('visible');
+                toggleMetronomeButton.classList.add('active');
+            } else if (isMetronomeVisible && !remoteIsVisible) {
+                 isMetronomeVisible = false;
+                 metronomeContainer.classList.remove('visible');
+                 toggleMetronomeButton.classList.remove('active');
+                 metronome.pause();
+            }
+            metronome.setState(msg.data, msg.isMasterClaim);
+        } else if (msg.type === 'metronome_tick') {
+            metronome.handleMasterTick(msg.data);
         }
     };
     channel.onerror = (err) => addLog(`Metronome data channel error: ${err.message || err}`);
     channel.onclose = () => {
          addLog('Metronome data channel closed.');
         toggleMetronomeButton.disabled = true;
-        metronomeContainer.classList.remove('visible');
+        metronomeContainer.classList.remove('visible', 'master', 'slave');
         toggleMetronomeButton.classList.remove('active');
         isMetronomeVisible = false;
         if(metronome) metronome.pause();
@@ -926,7 +939,7 @@ function sendChatMessage() {
     }
 }
 
-function sendMetronomeState() {
+function sendMetronomeState(isClaimingMaster = false) {
     if (metronomeChannel && metronomeChannel.readyState === 'open') {
         const state = metronome.getState();
         const payload = {
@@ -934,12 +947,24 @@ function sendMetronomeState() {
             data: {
                 ...state,
                 visible: isMetronomeVisible
-            }
+            },
+            isMasterClaim: isClaimingMaster
         };
         metronomeChannel.send(JSON.stringify(payload));
-        addLog(`Metronome state sent: ${JSON.stringify(payload.data)}`);
+        addLog(`Metronome state sent (Master Claim: ${isClaimingMaster}): ${JSON.stringify(payload.data)}`);
     }
 }
+
+function sendMetronomeTick(tickData) {
+    if (metronomeChannel && metronomeChannel.readyState === 'open' && metronome.isMaster) {
+        const payload = {
+            type: 'metronome_tick',
+            data: tickData
+        };
+        metronomeChannel.send(JSON.stringify(payload));
+    }
+}
+
 
 function setEventListeners() {
     const chatForm = document.querySelector('#chat-form');
@@ -1000,16 +1025,24 @@ function setEventListeners() {
         }
     });
 
-    toggleMetronomeButton.addEventListener('click', () => {
+   toggleMetronomeButton.addEventListener('click', () => {
         isMetronomeVisible = !isMetronomeVisible;
         metronomeContainer.classList.toggle('visible', isMetronomeVisible);
         toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
-
-        if (!isMetronomeVisible) {
+        if (isMetronomeVisible && !metronome.isMaster) {
+            metronome.claimMastership();
+        } else {
             metronome.pause();
+
+            sendMetronomeState();
         }
-        sendMetronomeState();
     });
+
+    metronomeContainer.addEventListener('dblclick', () => {
+        addLog("Attempting to claim metronome mastership...");
+        metronome.claimMastership();
+    });
+
 
     fileList.addEventListener('dragover', handleDragOver);
     fileList.addEventListener('dragleave', handleDragLeave);
@@ -1091,8 +1124,11 @@ async function init() {
 
     metronome = new Metronome({
         audioContext: audioContext,
-        onStateChange: (state) => {
-            sendMetronomeState();
+        onStateChange: (state, isClaimingMaster) => {
+            sendMetronomeState(isClaimingMaster);
+        },
+        onTick: (tickData) => {
+            sendMetronomeTick(tickData);
         }
     });
     metronome.insertInto(metronomeContainer);

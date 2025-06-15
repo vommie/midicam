@@ -7,10 +7,19 @@
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     cursor: grab;
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 #metronomeContainer.visible {
     display: block;
+}
+
+#metronomeContainer.master {
+    box-shadow: 0 0 15px 5px rgba(20, 220, 90, 0.7), 0 4px 15px rgba(0,0,0,0.5);
+}
+
+#metronomeContainer.slave {
+    box-shadow: 0 0 15px 5px rgba(250, 94, 70, 0.7), 0 4px 15px rgba(0,0,0,0.5);
 }
 
 .metronome {
