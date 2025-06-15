@@ -16,9 +16,19 @@
 .metronome .controls {
     position: relative;
     display: grid;
-    grid-template-columns: 50px auto;
+    grid-template-columns: 1fr;
     justify-items: center;
     align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.metronome .play-beats-container {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: center;
+    grid-gap: 5px;
 }
 
 .metronome #play {
@@ -104,4 +114,35 @@ input#beats {
 .metronome .input-scrollable::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+.metronome .volume-control {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    width: 80%;
+    align-items: center;
+    gap: 5px;
+}
+
+.metronome .volume-control input[type="range"] {
+    width: 100%;
+}
+
+.metronome .volume-control img {
+    width: 100%;
+    height: auto;
+    cursor: pointer;
+    transition: filter 0.2s ease-in-out;
+}
+
+.metronome .volume-control img:hover {
+    filter: invert(1) brightness(1.2);
+}
+
+.metronome .volume-control img.muted {
+    filter: invert(1) grayscale(1) opacity(0.6);
+}
+
+.metronome .volume-control img.muted:hover {
+    filter: invert(1) grayscale(1) opacity(0.8);
 }
