@@ -225,8 +225,9 @@
     transition: box-shadow .2s;
 }
 
-.bar.white .piano-key:hover {
-    background: #bbffbb;
+.bar.white .piano-key:hover,
+.bar.white .piano-key .key-pressed:hover {
+    background: var(--local-hover-color-white) !important;
 }
 
 /* .bar.white .piano-key.active {
@@ -253,8 +254,9 @@
     margin-top: 1px;
 }
 
-.bar.black .piano-key:hover {
-    background: #008800;
+.bar.black .piano-key:hover,
+.bar.black .piano-key .key-pressed:hover {
+    background: var(--local-hover-color-black) !important;
 }
 
 /* .bar.black .piano-key.active {

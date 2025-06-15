@@ -264,12 +264,25 @@ class Piano {
         this.elements.keys = [];
         this.elements.pedals = this.initPedalElements();
         this.createSettingsUI();
+        this.updateDynamicStyles();
         this.setPedalButtonsVisibility();
         this.insertKeys();
         this.mouseIsDown = false;
         this.addMouseHandling();
         if(!opts.noScale === true) this.handleResize();
         this.sendMidiMessage = opts.sendMidiMessage || (() => {});
+    }
+
+    updateDynamicStyles() {
+        const [r, g, b] = this.opts.keyPressedLocalRGB;
+        const newR = Math.round(r * 0.9 + 255 * 0.2);
+        const newG = Math.round(g * 0.9 + 255 * 0.2);
+        const newB = Math.round(b * 0.9 + 255 * 0.2);
+
+        const tintedColor = `rgb(${Math.min(255, newR)}, ${Math.min(255, newG)}, ${Math.min(255, newB)})`;
+
+        this.elements.piano.container.style.setProperty('--local-hover-color-white', tintedColor);
+        this.elements.piano.container.style.setProperty('--local-hover-color-black', tintedColor);
     }
 
     getTemplates() {
