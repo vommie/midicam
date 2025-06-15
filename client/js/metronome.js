@@ -151,6 +151,24 @@ class Metronome {
         this.changeBeatVisualsAmount(beats);
     }
 
+    adjustTempoNameFontSize() {
+        const el = this.elements.bpmName;
+        if (!el) return;
+
+        const maxFontSize = 16;
+        const minFontSize = 8;
+        const containerWidth = el.clientWidth;
+
+        let currentSize = maxFontSize;
+        el.style.fontSize = `${currentSize}px`;
+
+        while (el.scrollWidth > containerWidth && currentSize > minFontSize) {
+            currentSize -= 0.5;
+            el.style.fontSize = `${currentSize}px`;
+        }
+    }
+
+
     addEventListeners() {
         [this.elements.bpmInput, this.elements.beatsInput].forEach(input => {
             input.addEventListener('wheel', e => {
@@ -169,6 +187,7 @@ class Metronome {
             const bpm = parseInt(this.elements.bpmInput.value);
             this.elements.bpmName.textContent = this.getTempoName(bpm);
             localStorage.setItem('metronomeBpm', bpm);
+            this.adjustTempoNameFontSize();
             this.changeTempo();
         });
 
@@ -221,6 +240,15 @@ class Metronome {
     insertInto(containerElement) {
         if (!containerElement) return false;
         containerElement.appendChild(this.elements.container);
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    this.adjustTempoNameFontSize();
+                    observer.unobserve(entry.target);
+                }
+            });
+        });
+        observer.observe(this.elements.container);
         return true;
     }
 
@@ -241,6 +269,7 @@ class Metronome {
             this.elements.bpmInput.value = state.bpm;
             this.elements.bpmName.textContent = this.getTempoName(state.bpm);
             localStorage.setItem('metronomeBpm', state.bpm);
+            this.adjustTempoNameFontSize();
         }
 
         const beatsChanged = this.elements.beatsInput.value != state.beats;

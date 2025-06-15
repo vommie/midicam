@@ -330,17 +330,3 @@ video:fullscreen {
     margin: 0;
     font-style: italic;
 }
-
-#metronomeContainer {
-    position: fixed;
-    z-index: 2000;
-    display: none; /* Wird per JS sichtbar gemacht */
-    background: rgba(34, 34, 34, 0.8);
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-}
-
-#metronomeContainer.visible {
-    display: block;
-}
