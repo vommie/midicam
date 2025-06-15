@@ -1,6 +1,7 @@
 import { Pianos } from "./piano.js";
 import { Metronome } from "./metronome.js";
 import { CamLocalDrag } from "./camLocalDrag.js";
+import { MetronomeDrag } from "./metronomeDrag.js";
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
@@ -1022,6 +1023,7 @@ async function init() {
     metronome.insertInto(metronomeContainer);
 
     new CamLocalDrag();
+    new MetronomeDrag();
     loadSettings();
 }
 
