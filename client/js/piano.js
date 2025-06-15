@@ -658,7 +658,7 @@ class Piano {
         this.elements.piano.container.style.maxWidth = `${pianoRect.width}px`;
         this.elements.piano.barWhite.style.gridAutoColumns = `${keyWhiteWidth}px`;
         this.elements.piano.barBlack.style.gridAutoColumns = `${keyBlackWidth}px`;
-        this.elements.piano.container.style.height = `${keyWhiteWidth*6}px`;
+        this.elements.piano.container.style.height = `${keyWhiteWidth*5}px`;
 
         let keysWhite = this.elements.piano.container.querySelectorAll(`.bar.white .piano-key`);
         this.boxShadows.keyWhite = `inset 0px ${-4*factor}px ${1*factor}px rgba(0, 0, 0, .5)`;
