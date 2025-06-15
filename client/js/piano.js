@@ -685,6 +685,7 @@ class Piano {
         let activate;
         if (src === 'local') {
             activate = !this.elements.pedals.soft.classList.contains('active');
+            this.sendMidiMessage(new Uint8Array([176, 67, activate ? 127 : 0]));
         } else {
             activate = state;
         }
@@ -708,6 +709,8 @@ class Piano {
         let activate;
         if (src === 'local') {
             activate = !this.elements.pedals.sostenuto.classList.contains('active');
+            this.sendMidiMessage(new Uint8Array([176, 66, activate ? 127 : 0]));
+
         } else {
             activate = state;
         }
@@ -727,9 +730,10 @@ class Piano {
         const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
 
         let activate;
-        // For local click, velocity is null, so we toggle. For MIDI, velocity is a number.
         if (src === 'local' && velocity === null) {
             activate = !this.elements.pedals.sustain.classList.contains('active');
+            this.sendMidiMessage(new Uint8Array([176, 64, activate ? 127 : 0]));
+
         } else {
             activate = velocity > 0;
         }
