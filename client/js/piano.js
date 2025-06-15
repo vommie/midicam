@@ -8,6 +8,40 @@ class Pianos {
         this.keys = this.createKeys();
     }
 
+    _getStorageKey(id) {
+        return `piano_settings_${id}`;
+    }
+
+    savePianoSettings(id, opts) {
+        const settingsToSave = {
+            enableMidi: opts.enableMidi,
+            playMidiNotes: opts.playMidiNotes,
+            keyPressedLocalRGB: opts.keyPressedLocalRGB,
+            keyPressedRemoteRGB: opts.keyPressedRemoteRGB,
+            fromKey: opts.fromKey,
+            toKey: opts.toKey
+        };
+        try {
+            localStorage.setItem(this._getStorageKey(id), JSON.stringify(settingsToSave));
+            console.log(`Piano ${id} settings saved to localStorage.`);
+        } catch (e) {
+            console.error(`Failed to save piano ${id} settings:`, e);
+        }
+    }
+
+    loadPianoSettings(id) {
+        try {
+            const savedSettings = localStorage.getItem(this._getStorageKey(id));
+            if (savedSettings) {
+                console.log(`Piano ${id} settings loaded from localStorage.`);
+                return JSON.parse(savedSettings);
+            }
+        } catch (e) {
+            console.error(`Failed to load or parse piano ${id} settings:`, e);
+        }
+        return {};
+    }
+
     requestMidi() {
         if(this.midiEnabled) return;
         document.addEventListener("DOMContentLoaded", ()=> {
@@ -112,21 +146,52 @@ class Pianos {
         });
     }
 
+    // MODIFIZIERT: Lädt Einstellungen, bevor das Klavier erstellt wird
     createPiano(opts = {}) {
-        if(opts.fromKey == undefined) opts.fromKey = 1;
-        if(opts.toKey == undefined) opts.toKey = 88;
-        if(opts.enableMidi == undefined) opts.enableMidi = true;
-        if(opts.playMidiNotes == undefined) opts.playMidiNotes = false;
-        if(!this.validateOptRGBArray(opts.keyPressedLocalRGB)) opts.keyPressedLocalRGB = [0, 255, 0];
-        if(!this.validateOptRGBArray(opts.keyPressedRemoteRGB)) opts.keyPressedRemoteRGB = [255, 0, 0];
-        if(opts.pedalSoft == undefined) opts.pedalSoft = true;
-        if(opts.pedalSostenuto == undefined) opts.pedalSostenuto = true;
-        if(opts.pedalSustain == undefined) opts.pedalSustain = true;
-        if(opts.enableMidi) this.requestMidi();
-        if(opts.undampedStrings == undefined) opts.undampedStrings = ['G6', 'C8'];
-        else if(opts.undampedStrings === false) opts.undampedStrings = [];
-        this.pianos.push(new Piano(this.pianos.length, this.keys, opts));
+        const pianoId = this.pianos.length;
+        const loadedOpts = this.loadPianoSettings(pianoId);
+
+        // Standard-Optionen mit geladenen Optionen zusammenführen
+        // Geladene Optionen überschreiben die Standardwerte
+        const finalOpts = { ...opts, ...loadedOpts };
+
+        if(finalOpts.fromKey == undefined) finalOpts.fromKey = 1;
+        if(finalOpts.toKey == undefined) finalOpts.toKey = 88;
+        if(finalOpts.enableMidi == undefined) finalOpts.enableMidi = true;
+        if(finalOpts.playMidiNotes == undefined) finalOpts.playMidiNotes = false;
+        if(!this.validateOptRGBArray(finalOpts.keyPressedLocalRGB)) finalOpts.keyPressedLocalRGB = [0, 255, 0];
+        if(!this.validateOptRGBArray(finalOpts.keyPressedRemoteRGB)) finalOpts.keyPressedRemoteRGB = [255, 0, 0];
+        if(finalOpts.pedalSoft == undefined) finalOpts.pedalSoft = true;
+        if(finalOpts.pedalSostenuto == undefined) finalOpts.pedalSostenuto = true;
+        if(finalOpts.pedalSustain == undefined) finalOpts.pedalSustain = true;
+        if(finalOpts.enableMidi) this.requestMidi();
+        if(finalOpts.undampedStrings == undefined) finalOpts.undampedStrings = ['G6', 'C8'];
+        else if(finalOpts.undampedStrings === false) finalOpts.undampedStrings = [];
+
+        const piano = new Piano(pianoId, this.keys, finalOpts, this);
+        this.pianos.push(piano);
     }
+
+    // MODIFIZIERT: Speichert die Einstellungen, wenn das Klavier neu erstellt wird
+    recreatePiano(id, newOpts) {
+        const oldPiano = this.pianos[id];
+        if (!oldPiano) return;
+
+        const finalOpts = { ...oldPiano.opts, ...newOpts };
+
+        // HIER werden die Einstellungen gespeichert, da dies bei jeder Änderung aufgerufen wird
+        this.savePianoSettings(id, finalOpts);
+
+        const container = document.querySelector(oldPiano.opts.selector);
+        if (container) {
+            const pianoElement = container.querySelector(`.piano[data-id='${id}']`);
+            if (pianoElement) pianoElement.remove();
+        }
+
+        const newPiano = new Piano(id, this.keys, finalOpts, this);
+        this.pianos[id] = newPiano;
+    }
+
 
     validateOptRGBArray(array) {
         if(array == undefined) return false;
@@ -180,10 +245,11 @@ class Pianos {
 
 class Piano {
 
-    constructor(id, keys, opts = {}) {
+    constructor(id, keys, opts = {}, manager) {
         this.id = id;
         this.keys = keys;
         this.opts = opts;
+        this.manager = manager;
         this.boxShadows = {};
         this.scaleFactor = 1;
         this.sustainedKeyIds = [];
@@ -197,6 +263,7 @@ class Piano {
         this.elements.piano = this.insertPiano();
         this.elements.keys = [];
         this.elements.pedals = this.initPedalElements();
+        this.createSettingsUI();
         this.setPedalButtonsVisibility();
         this.insertKeys();
         this.mouseIsDown = false;
@@ -211,10 +278,11 @@ class Piano {
         piano.classList.add('piano');
         piano.innerHTML = `
         <div class="case">
+            <div class="piano-settings-container"></div>
             <div class="pedals">
-                <div class="pedal-soft"><button id="pedal-soft">Soft</div>
-                <div class="pedal-sostenuto"><button id="pedal-sostenuto">Sost</div>
-                <div class="pedal-sustain"><button id="pedal-sustain">Sus</div>
+                <div class="pedal-soft"><button id="pedal-soft-${this.id}">Soft</div>
+                <div class="pedal-sostenuto"><button id="pedal-sostenuto-${this.id}">Sost</div>
+                <div class="pedal-sustain"><button id="pedal-sustain-${this.id}">Sus</div>
             </div>
         </div>
         <div class="felt"></div>
@@ -304,13 +372,135 @@ class Piano {
         return key;
     }
 
+    createSettingsUI() {
+        const container = this.elements.piano.case.querySelector('.piano-settings-container');
+        const id = this.id;
+
+        const settingsHTML = `
+            <div class="piano-settings">
+                <div class="setting-item">
+                    <label for="enableMidi-${id}">Enable MIDI</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="enableMidi-${id}" ${this.opts.enableMidi ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label for="playMidiNotes-${id}">Play Notes</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="playMidiNotes-${id}" ${this.opts.playMidiNotes ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label for="localColor-${id}">Local Color</label>
+                    <input type="color" id="localColor-${id}" value="${this.rgbToHex(this.opts.keyPressedLocalRGB)}">
+                </div>
+                <div class="setting-item">
+                    <label for="remoteColor-${id}">Remote Color</label>
+                    <input type="color" id="remoteColor-${id}" value="${this.rgbToHex(this.opts.keyPressedRemoteRGB)}">
+                </div>
+                <div class="setting-item range-setting">
+                    <label>Key Range</label>
+                    <div class="dual-range-slider">
+                        <div class="range-values">${this.opts.fromKey} - ${this.opts.toKey}</div>
+                        <input type="range" id="fromKey-${id}" min="1" max="88" value="${this.opts.fromKey}">
+                        <input type="range" id="toKey-${id}" min="1" max="88" value="${this.opts.toKey}">
+                        <div class="range-track"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = settingsHTML;
+        this.addSettingsEventListeners();
+        this.updateDualRangeSliderVisuals();
+    }
+
+    addSettingsEventListeners() {
+        const id = this.id;
+        document.getElementById(`enableMidi-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`playMidiNotes-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`localColor-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`remoteColor-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`fromKey-${id}`).addEventListener('input', this.handleRangeSliderInput);
+        document.getElementById(`toKey-${id}`).addEventListener('input', this.handleRangeSliderInput);
+        document.getElementById(`fromKey-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`toKey-${id}`).addEventListener('change', this.handleSettingsChange);
+    }
+
+    handleSettingsChange = () => {
+        const id = this.id;
+        const newOpts = {
+            enableMidi: document.getElementById(`enableMidi-${id}`).checked,
+            playMidiNotes: document.getElementById(`playMidiNotes-${id}`).checked,
+            keyPressedLocalRGB: this.hexToRgb(document.getElementById(`localColor-${id}`).value),
+            keyPressedRemoteRGB: this.hexToRgb(document.getElementById(`remoteColor-${id}`).value),
+            fromKey: parseInt(document.getElementById(`fromKey-${id}`).value, 10),
+            toKey: parseInt(document.getElementById(`toKey-${id}`).value, 10),
+        };
+        this.manager.recreatePiano(this.id, newOpts);
+    }
+
+    handleRangeSliderInput = () => {
+        const fromSlider = document.getElementById(`fromKey-${this.id}`);
+        const toSlider = document.getElementById(`toKey-${this.id}`);
+        let fromVal = parseInt(fromSlider.value, 10);
+        let toVal = parseInt(toSlider.value, 10);
+
+        if (fromVal >= toVal) {
+             [fromSlider.value, toSlider.value] = [toVal, fromVal];
+        }
+
+        this.updateDualRangeSliderVisuals();
+    }
+
+    updateDualRangeSliderVisuals = () => {
+        const id = this.id;
+        const fromSlider = document.getElementById(`fromKey-${id}`);
+        const toSlider = document.getElementById(`toKey-${id}`);
+        const fromVal = parseInt(fromSlider.value, 10);
+        const toVal = parseInt(toSlider.value, 10);
+        const container = fromSlider.parentElement;
+        const rangeValues = container.querySelector('.range-values');
+        const rangeTrack = container.querySelector('.range-track');
+
+        rangeValues.textContent = `${fromVal} - ${toVal}`;
+
+        const min = parseInt(fromSlider.min, 10);
+        const max = parseInt(fromSlider.max, 10);
+
+        const fromPercent = ((fromVal - min) / (max - min)) * 100;
+        const toPercent = ((toVal - min) / (max - min)) * 100;
+
+        rangeTrack.style.left = `${fromPercent}%`;
+        rangeTrack.style.width = `${toPercent - fromPercent}%`;
+    }
+
+    rgbToHex(rgb) {
+        if (!rgb) return '#000000';
+        return "#" + rgb.map(x => {
+            const hex = x.toString(16);
+            return hex.length === 1 ? "0" + hex : hex;
+        }).join('');
+    }
+
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ] : [0, 0, 0];
+    }
+
     initPedalElements() {
         const container = this.elements.piano.case.querySelector('.pedals');
         let elements = {
             'container': container,
-            'soft': container.querySelector('#pedal-soft'),
-            'sostenuto': container.querySelector('#pedal-sostenuto'),
-            'sustain': container.querySelector('#pedal-sustain'),
+            'soft': container.querySelector(`#pedal-soft-${this.id}`),
+            'sostenuto': container.querySelector(`#pedal-sostenuto-${this.id}`),
+            'sustain': container.querySelector(`#pedal-sustain-${this.id}`),
         }
         elements.soft.addEventListener('click', e=>{this.softPedal(null, 'click');});
         elements.sostenuto.addEventListener('click', e=>{this.sostenutoPedal(null, 'click');});
