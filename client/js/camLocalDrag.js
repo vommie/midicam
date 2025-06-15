@@ -12,7 +12,6 @@ class CamLocalDrag {
         this.startRight = 0;
         this.minVisiblePx = 20;
 
-        // Load saved position and size from localStorage
         const savedPosition = localStorage.getItem('localVideoPosition');
         const savedSize = localStorage.getItem('localVideoSize');
 
@@ -34,7 +33,6 @@ class CamLocalDrag {
             this.localVideoWrapper.style.height = '200px';
         }
 
-        // Warten, bis das Video geladen ist, um das Seitenverhältnis korrekt zu berechnen
         this.localVideo.addEventListener('loadedmetadata', () => {
             this.ensureWithinViewport();
         });
@@ -46,7 +44,6 @@ class CamLocalDrag {
     }
 
     addEventListeners() {
-        // Maus-Events für Dragging
         this.localVideo.addEventListener('mousedown', (e) => {
             this.isDragging = true;
             const rect = this.localVideoWrapper.getBoundingClientRect();
@@ -55,7 +52,6 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
-        // Touch-Events für Dragging
         this.localVideo.addEventListener('touchstart', (e) => {
             this.isDragging = true;
             const touch = e.touches[0];
@@ -65,7 +61,6 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
-        // Maus-Events für Resizing
         this.resizeHandle.addEventListener('mousedown', (e) => {
             this.isResizing = true;
             this.startX = e.clientX;
@@ -76,7 +71,6 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
-        // Touch-Events für Resizing
         this.resizeHandle.addEventListener('touchstart', (e) => {
             this.isResizing = true;
             const touch = e.touches[0];
@@ -88,7 +82,6 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
-        // Mousemove und Touchmove
         document.addEventListener('mousemove', (e) => {
             this.handleMove(e);
         });
@@ -98,7 +91,6 @@ class CamLocalDrag {
             e.preventDefault();
         });
 
-        // Mouseup und Touchend
         document.addEventListener('mouseup', () => {
             this.isDragging = false;
             this.isResizing = false;
@@ -109,7 +101,6 @@ class CamLocalDrag {
             this.isResizing = false;
         });
 
-        // Doppelklick zum Zurücksetzen
         this.localVideoWrapper.addEventListener('dblclick', () => {
             this.localVideoWrapper.style.right = '20px';
             this.localVideoWrapper.style.top = '20px';
@@ -120,7 +111,6 @@ class CamLocalDrag {
             this.triggerChangeEvent('size', { width: 300, height: 200 });
         });
 
-        // Tastatureingaben für Barrierefreiheit
         this.localVideoWrapper.setAttribute('tabindex', '0');
         this.localVideoWrapper.setAttribute('aria-label', 'Lokales Videofenster, verwenden Sie Pfeiltasten zum Verschieben');
 
@@ -154,7 +144,6 @@ class CamLocalDrag {
             this.triggerChangeEvent('position', { right, top });
         });
 
-        // Cursor-Logik
         this.localVideoWrapper.addEventListener('mousemove', (e) => {
             const rect = this.localVideoWrapper.getBoundingClientRect();
             const resizeAreaSize = 15;

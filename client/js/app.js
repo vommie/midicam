@@ -2,7 +2,6 @@ import { Pianos } from "./piano.js";
 import { Metronome } from "./metronome.js";
 import { CamLocalDrag } from "./camLocalDrag.js";
 
-// Grundsetup
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log-msgs');
@@ -14,7 +13,7 @@ const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
-const serverUrlInput = document.getElementById('serverUrl'); // Neues Feld
+const serverUrlInput = document.getElementById('serverUrl');
 const startConnectionButton = document.getElementById('startConnection');
 let pc;
 let midiChannel;
@@ -31,12 +30,10 @@ let ws;
 const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
 
-// Audio-Objekte mit Pfad assets/
 const fileSentSound = new Audio('assets/file_sent.wav');
 const fileReceiveSound = new Audio('assets/file_receive.wav');
 const fileErrorSound = new Audio('assets/file_error.wav');
 
-// Logging-Funktion
 function addLog(msg) {
     const line = document.createElement('div');
     line.textContent += `${msg}`;
@@ -44,20 +41,17 @@ function addLog(msg) {
     log.scrollTop = log.scrollHeight;
 }
 
-// Chat-Nachricht anzeigen
 function addChatMessage(msg) {
     chat.textContent += `${msg}\n`;
     chat.scrollTop = chat.scrollHeight;
 }
 
-// URL parsen, um serverIp und serverPort zu extrahieren
 function parseServerUrl(url) {
     try {
-        // Entferne Protokolle falls vorhanden, da wir sie später hinzufügen
         const cleanUrl = url.replace(/^wss?:\/\//i, '').replace(/^https?:\/\//i, '');
-        const urlObj = new URL(`http://${cleanUrl}`); // http:// als Dummy-Protokoll, wird später ersetzt
+        const urlObj = new URL(`http://${cleanUrl}`);
         const hostname = urlObj.hostname;
-        const port = urlObj.port || '8080'; // Standard-Port 8080, wenn keiner angegeben
+        const port = urlObj.port || '8080';
         return { serverIp: hostname, serverPort: port };
     } catch (err) {
         addLog(`Fehler beim Parsen der URL: ${err.message}`);
@@ -65,7 +59,6 @@ function parseServerUrl(url) {
     }
 }
 
-// Einstellungen im localStorage speichern
 function saveSettings() {
     const settings = {
         videoDeviceId: videoSelect.value,
@@ -79,7 +72,6 @@ function saveSettings() {
     addLog('Einstellungen gespeichert.');
 }
 
-// Einstellungen aus localStorage laden
 function loadSettings() {
     const savedSettings = localStorage.getItem('midiCamDiggaSettings');
     if (savedSettings) {
@@ -90,7 +82,6 @@ function loadSettings() {
     return { serverUrl: 'http://localhost:8080' };
 }
 
-// Geräte auflisten und Dropdowns befüllen
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -100,22 +91,19 @@ async function populateDeviceOptions() {
         const audioDevices = devices.filter(device => device.kind === 'audioinput');
         addLog(`Erkannte Video-Geräte: ${videoDevices.length}, Audio-Geräte: ${audioDevices.length}`);
 
-        // Funktion zur Erstellung von Fallback-Namen
         const createFallbackName = (type, index, device) => {
             if (device.label && device.label.trim() !== '' && device.label !== type) {
-                return device.label; // Echtes Label verwenden, wenn vorhanden
+                return device.label;
             }
-            return `${type} ${index + 1}`; // Fallback: "Kamera 1", "Mikrofon 1" etc.
+            return `${type} ${index + 1}`;
         };
 
-        // Video-Dropdown befüllen
         videoSelect.innerHTML = videoDevices.length > 0
             ? videoDevices.map((device, index) =>
                 `<option value="${device.deviceId}">${createFallbackName('Kamera', index, device)}</option>`
               ).join('')
             : '<option value="">Keine Kamera verfügbar</option>';
 
-        // Audio-Dropdown befüllen
         audioSelect.innerHTML = audioDevices.length > 0
             ? audioDevices.map((device, index) =>
                 `<option value="${device.deviceId}">${createFallbackName('Mikrofon', index, device)}</option>`
@@ -144,7 +132,6 @@ async function populateDeviceOptions() {
     }
 }
 
-// MIDI-Geräte auflisten und Dropdowns befüllen
 async function populateMidiOptions() {
     try {
         midiAccess = await navigator.requestMIDIAccess();
@@ -208,17 +195,15 @@ async function populateMidiOptions() {
     }
 }
 
-// Webcam und Audio starten
 async function startMedia() {
     try {
         const videoId = videoSelect.value;
         const audioId = audioSelect.value;
         const constraints = {
-            video: videoId ? { deviceId: { exact: videoId } } : true, // Nur exact, wenn ein Gerät ausgewählt ist
-            audio: audioId ? { deviceId: { exact: audioId } } : true  // Ditto für Audio
+            video: videoId ? { deviceId: { exact: videoId } } : true,
+            audio: audioId ? { deviceId: { exact: audioId } } : true
         };
 
-        // Wenn keine Geräte ausgewählt sind, entferne "exact" und lass den Browser wählen
         if (!videoId) delete constraints.video.deviceId;
         if (!audioId) delete constraints.audio.deviceId;
 
@@ -258,7 +243,6 @@ async function startMedia() {
     }
 }
 
-// Media-Stream umschalten
 async function switchMedia() {
     const newVideoId = videoSelect.value;
     const newAudioId = audioSelect.value;
@@ -356,7 +340,6 @@ async function switchMedia() {
     }
 }
 
-// Mikrofon-Lautstärke anpassen
 function adjustMicVolume() {
     if (gainNode) {
         gainNode.gain.value = parseFloat(micVolume.value);
@@ -365,7 +348,6 @@ function adjustMicVolume() {
     }
 }
 
-// MIDI verbinden
 async function connectMidi() {
     if (!midiAccess) {
         addLog('MIDI-Zugriff nicht initialisiert. Warte mal.');
@@ -403,7 +385,6 @@ async function connectMidi() {
     }
 }
 
-// WebRTC-Verbindung starten
 async function startConnection() {
     if (pc) {
         pc.close();
@@ -451,13 +432,12 @@ async function startConnection() {
     let pendingIceCandidates = [];
 
     const trackPromises = localStream.getTracks().map(track => {
-        addLog(`Track hinzufüge: ${track.kind}`);
+        addLog(`Track hinzufügt: ${track.kind}`);
         return pc.addTrack(track, localStream);
     });
     await Promise.all(trackPromises);
     addLog('Alle Tracks hinzugefügt.');
 
-    // WebSocket mit ws:// oder wss:// basierend auf der Eingabe
     const protocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
     ws = new WebSocket(`${protocol}://${serverIp}:${serverPort}`);
 
@@ -570,7 +550,6 @@ async function startConnection() {
         }
     };
 
-    // DataChannels einrichten
     midiChannel = pc.createDataChannel('midiChannel', { ordered: false, maxRetransmits: 0 });
     setupMidiChannel(midiChannel);
     fileChannel = pc.createDataChannel('fileChannel');
@@ -594,7 +573,6 @@ async function startConnection() {
     saveSettings();
 }
 
-// Verbindung trennen
 function disconnect() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'disconnect-all' }));
@@ -632,7 +610,6 @@ function disconnect() {
     resetConnectionUI();
 }
 
-// UI zurücksetzen
 function resetConnectionUI() {
     startConnectionButton.disabled = false;
     startConnectionButton.style.backgroundColor = '#4CAF50';
@@ -642,7 +619,6 @@ function resetConnectionUI() {
     document.querySelector('label[for="serverUrl"]').style.display = 'block';
 }
 
-// MIDI DataChannel-Setup
 function setupMidiChannel(channel) {
     channel.binaryType = 'arraybuffer';
     channel.onopen = () => addLog('MIDI-Kanal offen.');
@@ -664,7 +640,6 @@ function setupMidiChannel(channel) {
     channel.onclose = () => addLog('MIDI-Kanal zu.');
 }
 
-// Chat DataChannel-Setup
 function setupChatChannel(channel) {
     channel.onopen = () => addLog('Chat-Kanal offen.');
     channel.onmessage = (event) => {
@@ -675,7 +650,6 @@ function setupChatChannel(channel) {
     channel.onclose = () => addLog('Chat-Kanal zu.');
 }
 
-// Datei DataChannel-Setup
 let activeReceives = new Map();
 
 function setupFileChannel(channel) {
@@ -734,7 +708,6 @@ function setupFileChannel(channel) {
     };
 }
 
-// Filesharing aktivieren/deaktivieren
 function enableFileSharing() {
     fileList.style.backgroundColor = '#0F0F0F';
     fileList.style.opacity = '1';
@@ -749,7 +722,6 @@ function disableFileSharing() {
     addLog('Filesharing deaktiviert.');
 }
 
-// Drag-and-Drop-Handler
 function handleDragOver(event) {
     event.preventDefault();
     if (isFileSharingReady) {
@@ -807,7 +779,6 @@ async function handleDrop(event) {
     }
 }
 
-// Datei zur Liste hinzufügen
 function addFileToList(fileName, fileType, fileData, isSent, showProgress = false) {
     const fileItem = document.createElement('div');
     fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
@@ -850,7 +821,6 @@ function addFileToList(fileName, fileType, fileData, isSent, showProgress = fals
     return fileItem;
 }
 
-// Fortschritt aktualisieren
 function updateFileProgress(fileItem, percentage, speed) {
     const progressBar = fileItem.querySelector('.progress-bar');
     const progressText = fileItem.querySelector('.progress-text');
@@ -860,7 +830,6 @@ function updateFileProgress(fileItem, percentage, speed) {
     addLog(`Update Fortschritt: ${Math.round(percentage)}%`);
 }
 
-// Dateiübertragung abschließen
 function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
     const progressContainer = fileItem.querySelector('.progress-container');
     const progressText = fileItem.querySelector('.progress-text');
@@ -876,7 +845,6 @@ function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
     };
 }
 
-// Datei öffnen/herunterladen
 function handleFileOpen(fileName, fileType, url) {
     if (fileType.startsWith('image/') || fileType === 'application/pdf' || fileType.startsWith('text/')) {
         window.open(url, '_blank');
@@ -890,7 +858,6 @@ function handleFileOpen(fileName, fileType, url) {
     }
 }
 
-// MIME-Type zu Icon
 function getFileIcon(fileType) {
     if (fileType.startsWith('image/')) return 'file_image.svg';
     if (fileType === 'application/pdf') return 'file_pdf.svg';
@@ -901,7 +868,6 @@ function getFileIcon(fileType) {
     return 'file_generic.svg';
 }
 
-// Chat-Nachricht senden
 function sendChatMessage() {
     const message = messageInput.value.trim();
     if (message && chatChannel && chatChannel.readyState === 'open') {
@@ -913,7 +879,6 @@ function sendChatMessage() {
     }
 }
 
-// Event-Listener setzen
 function setEventListeners() {
     const chatForm = document.querySelector('#chat-form');
     chatForm.addEventListener('submit', (e) => {
@@ -941,7 +906,6 @@ function setEventListeners() {
     fileList.addEventListener('drop', handleDrop);
 }
 
-// MIDI von Piano-Tasten senden
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
         midiChannel.send(midiData.buffer); // ArrayBuffer senden
@@ -951,7 +915,6 @@ function sendMidiMessage(midiData) {
     }
 }
 
-// Initialisierung
 async function init() {
     await populateDeviceOptions();
     await populateMidiOptions();
