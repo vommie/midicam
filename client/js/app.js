@@ -981,7 +981,7 @@ function setEventListeners() {
 
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
-        midiChannel.send(midiData.buffer); // ArrayBuffer senden
+        midiChannel.send(midiData.buffer);
         addLog(`MIDI von Piano gesendet: [${midiData}]`);
     } else {
         addLog('MIDI-Kanal nicht offen, kann nicht senden.');
@@ -1014,6 +1014,7 @@ async function init() {
     });
 
     metronome = new Metronome({
+        audioContext: audioContext,
         onStateChange: (state) => {
             sendMetronomeState();
         }
@@ -1021,7 +1022,6 @@ async function init() {
     metronome.insertInto(metronomeContainer);
 
     new CamLocalDrag();
-
     loadSettings();
 }
 
