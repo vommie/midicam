@@ -13,6 +13,8 @@ const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
 const remoteVolume = document.getElementById('remoteVolume');
+const micVolumeIcon = document.getElementById('micVolumeIcon');
+const remoteVolumeIcon = document.getElementById('remoteVolumeIcon');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
@@ -34,6 +36,8 @@ let currentAudioId = '';
 let midiAccess = null;
 let isFileSharingReady = false;
 let isMetronomeVisible = false;
+let lastMicVolume = 1;
+let lastRemoteVolume = 1;
 let ws;
 const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
@@ -316,14 +320,12 @@ function adjustMicVolume() {
     if (gainNode) {
         gainNode.gain.value = parseFloat(micVolume.value);
         addLog(`Mikrofon-Lautstärke auf ${micVolume.value} gesetzt.`);
-        saveSettings();
     }
 }
 
 function adjustRemoteVolume() {
     remoteVideo.volume = parseFloat(remoteVolume.value);
     addLog(`Remote-Lautstärke auf ${remoteVolume.value} gesetzt.`);
-    saveSettings();
 }
 
 async function connectMidi() {
@@ -951,8 +953,44 @@ function setEventListeners() {
 
     document.querySelector('#videoSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
-    document.querySelector('#micVolume').addEventListener('input', () => adjustMicVolume());
-    remoteVolume.addEventListener('input', adjustRemoteVolume);
+
+    micVolume.addEventListener('input', () => {
+        adjustMicVolume();
+        saveSettings();
+        lastMicVolume = micVolume.value;
+        micVolumeIcon.classList.toggle('muted', parseFloat(micVolume.value) === 0);
+    });
+    remoteVolume.addEventListener('input', () => {
+        adjustRemoteVolume();
+        saveSettings();
+        lastRemoteVolume = remoteVolume.value;
+        remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
+    });
+
+    micVolumeIcon.addEventListener('click', () => {
+        if (parseFloat(micVolume.value) > 0) {
+            lastMicVolume = micVolume.value;
+            micVolume.value = 0;
+            micVolumeIcon.classList.add('muted');
+        } else {
+            micVolume.value = lastMicVolume;
+            micVolumeIcon.classList.remove('muted');
+        }
+        adjustMicVolume();
+    });
+
+    remoteVolumeIcon.addEventListener('click', () => {
+        if (parseFloat(remoteVolume.value) > 0) {
+            lastRemoteVolume = remoteVolume.value;
+            remoteVolume.value = 0;
+            remoteVolumeIcon.classList.add('muted');
+        } else {
+            remoteVolume.value = lastRemoteVolume;
+            remoteVolumeIcon.classList.remove('muted');
+        }
+        adjustRemoteVolume();
+    });
+
 
     startConnectionButton.addEventListener('click', () => {
         if (startConnectionButton.innerHTML.includes('Verbindung trennen')) {
@@ -1027,6 +1065,12 @@ async function init() {
     if (!mediaReady) {
         addLog('Media-Setup fehlgeschlagen. Check mal Kamera/Mikro.');
     }
+
+    lastMicVolume = micVolume.value;
+    lastRemoteVolume = remoteVolume.value;
+    micVolumeIcon.classList.toggle('muted', parseFloat(micVolume.value) === 0);
+    remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
+
     adjustMicVolume();
     disableFileSharing();
 

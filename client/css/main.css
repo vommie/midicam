@@ -38,7 +38,6 @@ main video {
     background-color: #000;
 }
 
-/* NEUER REGELSATZ HINZUGEFÜGT */
 video:fullscreen {
     width: 100%;
     height: 100%;
@@ -195,7 +194,22 @@ video:fullscreen {
 #devices .volume-control img {
     width: 100%;
     height: auto;
+    cursor: pointer;
+    transition: filter 0.2s ease-in-out;
 }
+
+#devices .volume-control img:hover {
+    filter: brightness(1.2);
+}
+
+#devices .volume-control img.muted {
+    filter: grayscale(1) opacity(0.6);
+}
+
+#devices .volume-control img.muted:hover {
+    filter: grayscale(1) opacity(0.8);
+}
+
 
 #connection > div {
     display: flex;
@@ -204,7 +218,7 @@ video:fullscreen {
 }
 
 #connection label {
-    display: none !important; /* Label bleibt unsichtbar, aber für Screenreader verfügbar */
+    display: none !important;
 }
 
 #connection input {
@@ -223,7 +237,7 @@ video:fullscreen {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    width: 100%; /* Button nimmt volle Breite ein */
+    width: 100%;
 }
 
 #connection button:disabled {

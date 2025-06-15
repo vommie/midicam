@@ -43,13 +43,13 @@
                     <select id="midiOutputSelect"></select>
                 </div>
                 <div class="volume-controls-container">
-                    <div class="volume-control" title="Your microphone volume">
-                        <img src="assets/volume_locale.svg">
-                        <input type="range" id="micVolume" min="0" max="1" step="0.05" value="1">
+                    <div class="volume-control">
+                        <img src="assets/volume_locale.svg" id="micVolumeIcon" title="Mute your microphone">
+                        <input type="range" id="micVolume" min="0" max="1" step="0.05" value="1" title="Your microphone volume">
                     </div>
-                    <div class="volume-control" title="Remote user volume">
-                        <img src="assets/volume_remote.svg">
-                        <input type="range" id="remoteVolume" min="0" max="1" step="0.05" value="1">
+                    <div class="volume-control">
+                        <img src="assets/volume_remote.svg" id="remoteVolumeIcon" title="Mute remote user">
+                        <input type="range" id="remoteVolume" min="0" max="1" step="0.05" value="1" title="Remote user volume">
                     </div>
                 </div>
             </section>
