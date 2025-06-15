@@ -675,7 +675,10 @@ function setupChatChannel(channel) {
 }
 
 function setupMetronomeChannel(channel) {
-    channel.onopen = () => addLog('Metronom-Kanal offen.');
+    channel.onopen = () => {
+        addLog('Metronom-Kanal offen.');
+        sendMetronomeState();
+    };
     channel.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'metronome_sync') {
@@ -683,7 +686,7 @@ function setupMetronomeChannel(channel) {
             isMetronomeVisible = msg.data.visible;
             metronomeContainer.classList.toggle('visible', isMetronomeVisible);
             toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
-            metronome.setState(msg.data, true); // true, um Endlosschleife zu verhindern
+            metronome.setState(msg.data, true);
         }
     };
     channel.onerror = (err) => addLog(`Metronom-Kanal Fehler: ${err.message || err}`);
@@ -696,7 +699,6 @@ function setupMetronomeChannel(channel) {
         if(metronome) metronome.pause();
     };
 }
-
 
 let activeReceives = new Map();
 
