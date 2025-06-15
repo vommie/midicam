@@ -104,7 +104,7 @@ class CamLocalDrag {
         });
 
         this.localVideoWrapper.setAttribute('tabindex', '0');
-        this.localVideoWrapper.setAttribute('aria-label', 'Lokales Videofenster, verwenden Sie Pfeiltasten zum Verschieben');
+        this.localVideoWrapper.setAttribute('aria-label', 'Local video window, use arrow keys to move');
 
         this.localVideoWrapper.addEventListener('keydown', (e) => {
             let right = parseInt(this.localVideoWrapper.style.right) || 20;
@@ -150,7 +150,7 @@ class CamLocalDrag {
         });
 
         this.localVideoWrapper.addEventListener('videoChange', (e) => {
-            console.log('Video geändert:', e.detail);
+            console.log('Video changed:', e.detail);
         });
     }
 

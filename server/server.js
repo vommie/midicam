@@ -1,10 +1,10 @@
 const WebSocket = require('ws');
 
 const wss = new WebSocket.Server({ port: 8080 });
-let clients = []; // Maximale Größe: 2
+let clients = [];
 
 function disconnectAllClients() {
-    console.log('Trenne alle Clients.');
+    console.log('Disconnecting all clients.');
     clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'disconnected-by-peer' }));
@@ -12,33 +12,39 @@ function disconnectAllClients() {
         }
     });
     clients = [];
-    console.log('Alle Clients getrennt, Liste geleert');
+    console.log('All clients disconnected, list cleared.');
 }
 
 wss.on('connection', (ws) => {
-    console.log('Neuer Client verbunden.');
+    console.log('New client connected.');
 
     if (clients.length >= 2) {
-        console.log('Zu viele Teilnehmer, Verbindung abgelehnt!');
-        ws.send(JSON.stringify({ type: 'error', message: 'Maximale Teilnehmerzahl erreicht' }));
+        console.log('Too many participants, connection rejected.');
+        ws.send(JSON.stringify({ type: 'error', message: 'Maximum number of participants reached' }));
         ws.close();
         return;
     }
 
     clients.push(ws);
-    console.log(`Aktuelle Teilnehmer: ${clients.length}`);
+    console.log(`Current participants: ${clients.length}`);
 
     ws.on('message', (message) => {
-        const msg = JSON.parse(message);
-        console.log('Nachricht empfangen:', msg);
+        let msg;
+        try {
+            msg = JSON.parse(message);
+        } catch (e) {
+            console.error('Failed to parse incoming message:', message);
+            return;
+        }
+
+        console.log('Message received:', msg);
 
         if (msg.type === 'disconnect-all') {
-            disconnectAllClients(); // Explizite Trennung aller Clients
+            disconnectAllClients();
         } else {
-            // Normale Weiterleitung an den anderen Client
             clients.forEach((client) => {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
-                    console.log(`Sende Nachricht an Client: ${JSON.stringify(msg)}`);
+                    console.log(`Forwarding message to peer: ${JSON.stringify(msg)}`);
                     client.send(JSON.stringify(msg));
                 }
             });
@@ -46,14 +52,14 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
-        console.log('Client getrennt.');
+        console.log('Client disconnected.');
         disconnectAllClients();
     });
 
     ws.on('error', (err) => {
-        console.error('WebSocket Fehler:', err);
+        console.error('WebSocket error:', err);
         disconnectAllClients();
     });
 });
 
-console.log('WebSocket-Server läuft auf ws://localhost:8080.');
+console.log('WebSocket server is running on ws://localhost:8080.');
