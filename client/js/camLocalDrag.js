@@ -103,16 +103,6 @@ class CamLocalDrag {
             this.isResizing = false;
         });
 
-        this.localVideoWrapper.addEventListener('dblclick', () => {
-            this.localVideoWrapper.style.right = '20px';
-            this.localVideoWrapper.style.top = '20px';
-            this.localVideoWrapper.style.width = '300px';
-            this.localVideoWrapper.style.height = '200px';
-
-            this.triggerChangeEvent('position', { right: 20, top: 20 });
-            this.triggerChangeEvent('size', { width: 300, height: 200 });
-        });
-
         this.localVideoWrapper.setAttribute('tabindex', '0');
         this.localVideoWrapper.setAttribute('aria-label', 'Lokales Videofenster, verwenden Sie Pfeiltasten zum Verschieben');
 

@@ -9,6 +9,7 @@ const log = document.getElementById('log-msgs');
 const chat = document.getElementById('chat-msgs');
 const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
+const localVideoWrapper = document.getElementById('localVideoWrapper');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
@@ -980,6 +981,20 @@ function setEventListeners() {
     fileList.addEventListener('dragover', handleDragOver);
     fileList.addEventListener('dragleave', handleDragLeave);
     fileList.addEventListener('drop', handleDrop);
+
+    function handleFullscreenToggle(event) {
+        const element = event.currentTarget.id === 'localVideoWrapper' ? localVideo : remoteVideo;
+        if (!document.fullscreenElement) {
+            element.requestFullscreen().catch(err => {
+                addLog(`Fehler beim Aktivieren des Vollbildmodus: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    localVideoWrapper.addEventListener('dblclick', handleFullscreenToggle);
+    remoteVideo.addEventListener('dblclick', handleFullscreenToggle);
 }
 
 function sendMidiMessage(midiData) {
