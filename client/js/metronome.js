@@ -11,8 +11,8 @@ class Metronome {
 
         this.startTime = 0;
         this.nextBeatTime = 0;
-        this.lookahead = 25.0; // ms - Wie oft der Scheduler läuft
-        this.scheduleAheadTime = 0.1; // seconds - Wie weit wir im Voraus planen
+        this.lookahead = 10.0;
+        this.scheduleAheadTime = 0.1;
         this.schedulerTimer = null;
 
         this.isMutedByRemote = false;
