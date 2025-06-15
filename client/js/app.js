@@ -5,11 +5,11 @@ import { MetronomeDrag } from "./metronomeDrag.js";
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
+const localVideoWrapper = document.getElementById('localVideoWrapper');
 const log = document.getElementById('log-msgs');
 const chat = document.getElementById('chat-msgs');
 const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
-const localVideoWrapper = document.getElementById('localVideoWrapper');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
 const midiSelect = document.getElementById('midiSelect');
@@ -37,6 +37,11 @@ let ws;
 const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
 let metronome;
+
+const VIDEO_QUALITY = {
+    DEFAULT: { maxBitrate: 6000 * 1000 },
+    FULLSCREEN: { maxBitrate: 10000 * 1000 }
+};
 
 const fileSentSound = new Audio('assets/file_sent.wav');
 const fileReceiveSound = new Audio('assets/file_receive.wav');
@@ -74,7 +79,7 @@ function saveSettings() {
         micVolume: micVolume.value,
         midiDeviceId: midiSelect.value,
         midiOutputDeviceId: midiOutputSelect.value,
-        serverUrl: serverUrlInput.value // Speichere die volle URL
+        serverUrl: serverUrlInput.value
     };
     localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
     addLog('Einstellungen gespeichert.');
@@ -84,13 +89,12 @@ function loadSettings() {
     const savedSettings = localStorage.getItem('midiCamDiggaSettings');
     if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        serverUrlInput.value = settings.serverUrl || 'http://localhost:8080'; // Standard-URL
+        serverUrlInput.value = settings.serverUrl || 'http://localhost:8080';
         return settings;
     }
     return { serverUrl: 'http://localhost:8080' };
 }
 
-// ... (populateDeviceOptions, populateMidiOptions, startMedia, switchMedia, adjustMicVolume, connectMidi bleiben gleich) ...
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -110,13 +114,13 @@ async function populateDeviceOptions() {
         videoSelect.innerHTML = videoDevices.length > 0
             ? videoDevices.map((device, index) =>
                 `<option value="${device.deviceId}">${createFallbackName('Kamera', index, device)}</option>`
-              ).join('')
+            ).join('')
             : '<option value="">Keine Kamera verfügbar</option>';
 
         audioSelect.innerHTML = audioDevices.length > 0
             ? audioDevices.map((device, index) =>
                 `<option value="${device.deviceId}">${createFallbackName('Mikrofon', index, device)}</option>`
-              ).join('')
+            ).join('')
             : '<option value="">Kein Mikrofon verfügbar</option>';
 
         const settings = loadSettings();
@@ -208,8 +212,14 @@ async function startMedia() {
     try {
         const videoId = videoSelect.value;
         const audioId = audioSelect.value;
+        const videoConstraints = videoId ? {
+            deviceId: { exact: videoId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+        } : true;
+
         const constraints = {
-            video: videoId ? { deviceId: { exact: videoId } } : true,
+            video: videoConstraints,
             audio: audioId ? { deviceId: { exact: audioId } } : true
         };
 
@@ -242,7 +252,7 @@ async function startMedia() {
         return true;
     } catch (err) {
         if (err.name === 'OverconstrainedError') {
-            addLog('Fehler bei Media: Gerät nicht verfügbar (möglicherweise von einer anderen Instanz belegt).');
+            addLog('Fehler bei Media: Gerät oder Auflösung nicht verfügbar.');
         } else if (err.name === 'NotAllowedError') {
             addLog('Fehler bei Media: Zugriff auf Kamera/Mikrofon verweigert.');
         } else {
@@ -264,80 +274,29 @@ async function switchMedia() {
     }
 
     try {
-        if (videoChanged && audioChanged) {
+        if (videoChanged || audioChanged) {
             if (localStream) localStream.getTracks().forEach(track => track.stop());
-            if (audioContext) audioContext.close();
-            const constraints = {
-                video: newVideoId ? { deviceId: { exact: newVideoId } } : false,
-                audio: newAudioId ? { deviceId: { exact: newAudioId } } : false
-            };
-            addLog(`Beides umschalten mit: ${JSON.stringify(constraints)}`);
-            localStream = await navigator.mediaDevices.getUserMedia(constraints);
-            localVideo.srcObject = localStream;
-
-            if (localStream.getAudioTracks().length > 0) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const source = audioContext.createMediaStreamSource(localStream);
-                gainNode = audioContext.createGain();
-                gainNode.gain.value = parseFloat(micVolume.value);
-                source.connect(gainNode);
-                const destination = audioContext.createMediaStreamDestination();
-                gainNode.connect(destination);
-                const videoTracks = localStream.getVideoTracks();
-                const audioTrack = destination.stream.getAudioTracks()[0];
-                localStream = new MediaStream([...videoTracks, audioTrack]);
-                localVideo.srcObject = localStream;
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
             }
-        } else if (audioChanged) {
-            const audioConstraints = { audio: newAudioId ? { deviceId: { exact: newAudioId } } : false };
-            addLog(`Nur Audio umschalten mit: ${JSON.stringify(audioConstraints)}`);
-            const audioStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
-            const newAudioTrack = audioStream.getAudioTracks()[0];
-
-            if (localStream && localStream.getAudioTracks().length > 0) {
-                const oldAudioTrack = localStream.getAudioTracks()[0];
-                localStream.removeTrack(oldAudioTrack);
-                oldAudioTrack.stop();
-            }
-            localStream.addTrack(newAudioTrack);
-
-            if (audioContext) audioContext.close();
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaStreamSource(new MediaStream([newAudioTrack]));
-            gainNode = audioContext.createGain();
-            gainNode.gain.value = parseFloat(micVolume.value);
-            source.connect(gainNode);
-            const destination = audioContext.createMediaStreamDestination();
-            gainNode.connect(destination);
-            const adjustedAudioTrack = destination.stream.getAudioTracks()[0];
-            localStream.removeTrack(newAudioTrack);
-            localStream.addTrack(adjustedAudioTrack);
-        } else if (videoChanged) {
-            if (localStream && localStream.getVideoTracks().length > 0) {
-                localStream.getVideoTracks().forEach(track => track.stop());
-            }
-            const videoConstraints = { video: newVideoId ? { deviceId: { exact: newVideoId } } : false };
-            addLog(`Nur Video umschalten mit: ${JSON.stringify(videoConstraints)}`);
-            const videoStream = await navigator.mediaDevices.getUserMedia(videoConstraints);
-            const videoTrack = videoStream.getVideoTracks()[0];
-            if (localStream && localStream.getVideoTracks().length > 0) {
-                localStream.removeTrack(localStream.getVideoTracks()[0]);
-            }
-            localStream.addTrack(videoTrack);
-            localVideo.srcObject = localStream;
+            await startMedia();
         }
 
         if (pc) {
             const senders = pc.getSenders();
             const videoTrack = localStream.getVideoTracks()[0];
             const audioTrack = localStream.getAudioTracks()[0];
-            senders.forEach(sender => {
-                if (sender.track.kind === 'video' && videoTrack) {
-                    sender.replaceTrack(videoTrack);
-                } else if (sender.track.kind === 'audio' && audioTrack) {
-                    sender.replaceTrack(audioTrack);
-                }
-            });
+            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+
+            if (videoSender && videoTrack) {
+                await videoSender.replaceTrack(videoTrack);
+            }
+            if (audioSender && audioTrack) {
+                await audioSender.replaceTrack(audioTrack);
+            }
+            updateVideoEncodingParameters(!!document.fullscreenElement);
         }
 
         currentVideoId = newVideoId;
@@ -393,6 +352,30 @@ async function connectMidi() {
         addLog(`MIDI-Fehler: ${err}`);
     }
 }
+
+async function updateVideoEncodingParameters(fullscreen = false) {
+    if (!pc || pc.signalingState === 'closed') {
+        return;
+    }
+
+    try {
+        const videoSender = pc.getSenders().find(sender => sender.track && sender.track.kind === 'video');
+        if (!videoSender) return;
+
+        const parameters = videoSender.getParameters();
+        if (!parameters.encodings || parameters.encodings.length === 0) {
+            parameters.encodings = [{}];
+        }
+
+        const quality = fullscreen ? VIDEO_QUALITY.FULLSCREEN : VIDEO_QUALITY.DEFAULT;
+        parameters.encodings[0].maxBitrate = quality.maxBitrate;
+        await videoSender.setParameters(parameters);
+        addLog(`Videoqualität angepasst auf: ${fullscreen ? 'Vollbild' : 'Standard'} (${(quality.maxBitrate / 1000000).toFixed(1)} Mbps)`);
+    } catch (err) {
+        addLog(`Fehler bei der Anpassung der Videoqualität: ${err.message}`);
+    }
+}
+
 
 async function startConnection() {
     if (pc) {
@@ -551,6 +534,7 @@ async function startConnection() {
             startConnectionButton.innerHTML = 'Verbindung trennen';
             serverUrlInput.style.display = 'none';
             document.querySelector('label[for="serverUrl"]').style.display = 'none';
+            updateVideoEncodingParameters(false);
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
@@ -982,19 +966,38 @@ function setEventListeners() {
     fileList.addEventListener('dragleave', handleDragLeave);
     fileList.addEventListener('drop', handleDrop);
 
-    function handleFullscreenToggle(event) {
-        const element = event.currentTarget.id === 'localVideoWrapper' ? localVideo : remoteVideo;
-        if (!document.fullscreenElement) {
-            element.requestFullscreen().catch(err => {
-                addLog(`Fehler beim Aktivieren des Vollbildmodus: ${err.message}`);
-            });
+    function toggleFullscreen(element) {
+        const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+        if (!fullscreenElement) {
+            if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.webkitRequestFullscreen) { /* Safari */
+                element.webkitRequestFullscreen();
+            } else if (element.mozRequestFullScreen) { /* Firefox */
+                element.mozRequestFullScreen();
+            }
         } else {
-            document.exitFullscreen();
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) { /* Firefox */
+                document.mozCancelFullScreen();
+            }
         }
     }
 
-    localVideoWrapper.addEventListener('dblclick', handleFullscreenToggle);
-    remoteVideo.addEventListener('dblclick', handleFullscreenToggle);
+    localVideoWrapper.addEventListener('dblclick', () => toggleFullscreen(localVideo));
+    remoteVideo.addEventListener('dblclick', () => toggleFullscreen(remoteVideo));
+
+    function onFullscreenChange() {
+        const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+        updateVideoEncodingParameters(!!fullscreenElement);
+    }
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('mozfullscreenchange', onFullscreenChange);
 }
 
 function sendMidiMessage(midiData) {

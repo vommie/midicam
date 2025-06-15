@@ -38,6 +38,13 @@ main video {
     background-color: #000;
 }
 
+/* NEUER REGELSATZ HINZUGEFÜGT */
+video:fullscreen {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 #cams {
     grid-area: c;
 }
