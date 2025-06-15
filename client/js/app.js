@@ -72,7 +72,7 @@ function parseServerUrl(url) {
         const port = urlObj.port || '8080';
         return { serverIp: hostname, serverPort: port };
     } catch (err) {
-        addLog(`Fehler beim Parsen der URL: ${err.message}`);
+        addLog(`Error parsing URL: ${err.message}`);
         return null;
     }
 }
@@ -87,12 +87,12 @@ function saveSettings() {
         midiOutputDeviceId: midiOutputSelect.value,
         serverUrl: serverUrlInput.value
     };
-    localStorage.setItem('midiCamDiggaSettings', JSON.stringify(settings));
-    addLog('Einstellungen gespeichert.');
+    localStorage.setItem('settings', JSON.stringify(settings));
+    addLog('Settings saved.');
 }
 
 function loadSettings() {
-    const savedSettings = localStorage.getItem('midiCamDiggaSettings');
+    const savedSettings = localStorage.getItem('settings');
     if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         serverUrlInput.value = settings.serverUrl || 'http://localhost:8080';
@@ -104,11 +104,11 @@ function loadSettings() {
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        addLog(`Rohdaten der Geräte: ${JSON.stringify(devices.map(d => ({ kind: d.kind, label: d.label, deviceId: d.deviceId })))}`);
+        addLog(`Raw device data: ${JSON.stringify(devices.map(d => ({ kind: d.kind, label: d.label, deviceId: d.deviceId })))}`);
 
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         const audioDevices = devices.filter(device => device.kind === 'audioinput');
-        addLog(`Erkannte Video-Geräte: ${videoDevices.length}, Audio-Geräte: ${audioDevices.length}`);
+        addLog(`Detected video devices: ${videoDevices.length}, audio devices: ${audioDevices.length}`);
 
         const createFallbackName = (type, index, device) => {
             if (device.label && device.label.trim() !== '' && device.label !== type) {
@@ -119,15 +119,15 @@ async function populateDeviceOptions() {
 
         videoSelect.innerHTML = videoDevices.length > 0
             ? videoDevices.map((device, index) =>
-                `<option value="${device.deviceId}">${createFallbackName('Kamera', index, device)}</option>`
+                `<option value="${device.deviceId}">${createFallbackName('Camera', index, device)}</option>`
             ).join('')
-            : '<option value="">Keine Kamera verfügbar</option>';
+            : '<option value="">No camera available</option>';
 
         audioSelect.innerHTML = audioDevices.length > 0
             ? audioDevices.map((device, index) =>
-                `<option value="${device.deviceId}">${createFallbackName('Mikrofon', index, device)}</option>`
+                `<option value="${device.deviceId}">${createFallbackName('Microphone', index, device)}</option>`
             ).join('')
-            : '<option value="">Kein Mikrofon verfügbar</option>';
+            : '<option value="">No microphone available</option>';
 
         const settings = loadSettings();
         if (settings && settings.videoDeviceId && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
@@ -147,9 +147,9 @@ async function populateDeviceOptions() {
         currentVideoId = videoSelect.value;
         currentAudioId = audioSelect.value;
 
-        addLog('Geräte geladen.');
+        addLog('Devices loaded.');
     } catch (err) {
-        addLog(`Fehler beim Laden der Geräte: ${err}`);
+        addLog(`Error loading devices: ${err}`);
     }
 }
 
@@ -159,11 +159,11 @@ async function populateMidiOptions() {
         const inputs = Array.from(midiAccess.inputs.values());
         const outputs = Array.from(midiAccess.outputs.values());
 
-        midiSelect.innerHTML = '<option value="">Kein MIDI-Eingang</option>' +
+        midiSelect.innerHTML = '<option value="">No MIDI input</option>' +
             inputs.map(input =>
                 `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
             ).join('');
-        midiOutputSelect.innerHTML = '<option value="">Kein MIDI-Ausgang</option>' +
+        midiOutputSelect.innerHTML = '<option value="">No MIDI output</option>' +
             outputs.map(output =>
                 `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
             ).join('');
@@ -186,11 +186,11 @@ async function populateMidiOptions() {
             const selectedInputId = midiSelect.value;
             const selectedOutputId = midiOutputSelect.value;
 
-            midiSelect.innerHTML = '<option value="">Kein MIDI-Eingang</option>' +
+            midiSelect.innerHTML = '<option value="">No MIDI input</option>' +
                 inputs.map(input =>
                     `<option value="${input.id}">${input.name || 'MIDI-In ' + input.id.slice(0, 5)}</option>`
                 ).join('');
-            midiOutputSelect.innerHTML = '<option value="">Kein MIDI-Ausgang</option>' +
+            midiOutputSelect.innerHTML = '<option value="">No MIDI output</option>' +
                 outputs.map(output =>
                     `<option value="${output.id}">${output.name || 'MIDI-Out ' + output.id.slice(0, 5)}</option>`
                 ).join('');
@@ -206,13 +206,13 @@ async function populateMidiOptions() {
                 midiOutputSelect.value = '';
             }
 
-            addLog(`MIDI-Geräte aktualisiert: ${event.port.state} - ${event.port.name}`);
+            addLog(`MIDI devices updated: ${event.port.state} - ${event.port.name}`);
             connectMidi();
         };
 
-        addLog('MIDI-Geräte geladen.');
+        addLog('MIDI devices loaded.');
     } catch (err) {
-        addLog(`Fehler beim Laden der MIDI-Geräte: ${err}`);
+        addLog(`Error loading MIDI devices: ${err}`);
     }
 }
 
@@ -234,7 +234,7 @@ async function startMedia() {
         if (!videoId) delete constraints.video.deviceId;
         if (!audioId) delete constraints.audio.deviceId;
 
-        addLog(`Starte Media mit Constraints: ${JSON.stringify(constraints)}`);
+        addLog(`Starting media with constraints: ${JSON.stringify(constraints)}`);
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         localVideo.srcObject = localStream;
 
@@ -255,16 +255,16 @@ async function startMedia() {
         currentVideoId = videoSelect.value;
         currentAudioId = audioSelect.value;
 
-        addLog('Media gestartet.');
+        addLog('Media stream started.');
         saveSettings();
         return true;
     } catch (err) {
         if (err.name === 'OverconstrainedError') {
-            addLog('Fehler bei Media: Gerät oder Auflösung nicht verfügbar.');
+            addLog('Media Error: OverconstrainedError - Device or resolution not available.');
         } else if (err.name === 'NotAllowedError') {
-            addLog('Fehler bei Media: Zugriff auf Kamera/Mikrofon verweigert.');
+            addLog('Media Error: NotAllowedError - Access to camera/microphone denied.');
         } else {
-            addLog(`Fehler bei Media: ${err.message || err}`);
+            addLog(`Media Error: ${err.message || err}`);
         }
         return false;
     }
@@ -277,7 +277,7 @@ async function switchMedia() {
     const audioChanged = newAudioId !== currentAudioId;
 
     if (!videoChanged && !audioChanged) {
-        addLog('Keine Änderung.');
+        addLog('No media device change detected.');
         return;
     }
 
@@ -309,28 +309,28 @@ async function switchMedia() {
 
         currentVideoId = newVideoId;
         currentAudioId = newAudioId;
-        addLog('Media umgeschaltet.');
+        addLog('Media devices switched.');
         saveSettings();
     } catch (err) {
-        addLog(`Fehler beim Umschalten: ${err}`);
+        addLog(`Error switching media devices: ${err}`);
     }
 }
 
 function adjustMicVolume() {
     if (gainNode) {
         gainNode.gain.value = parseFloat(micVolume.value);
-        addLog(`Mikrofon-Lautstärke auf ${micVolume.value} gesetzt.`);
+        addLog(`Microphone volume set to ${micVolume.value}.`);
     }
 }
 
 function adjustRemoteVolume() {
     remoteVideo.volume = parseFloat(remoteVolume.value);
-    addLog(`Remote-Lautstärke auf ${remoteVolume.value} gesetzt.`);
+    addLog(`Remote volume set to ${remoteVolume.value}.`);
 }
 
 async function connectMidi() {
     if (!midiAccess) {
-        addLog('MIDI-Zugriff nicht initialisiert. Warte mal.');
+        addLog('MIDI access not initialized. Retrying...');
         return;
     }
     try {
@@ -344,24 +344,24 @@ async function connectMidi() {
             if (selectedInput) {
                 selectedInput.onmidimessage = (message) => {
                     const midiData = new Uint8Array(message.data);
-                    addLog(`MIDI lokal gesendet: [${midiData}]`);
+                    addLog(`Local MIDI message sent: [${midiData}]`);
                     pianos.getMIDIMessage(message, 'local');
                     if (midiChannel && midiChannel.readyState === 'open') {
                         midiChannel.send(midiData.buffer);
                     } else {
-                        addLog('MIDI-Kanal nicht offen.');
+                        addLog('MIDI data channel is not open.');
                     }
                 };
-                addLog(`MIDI-Eingang connected zu: ${selectedInput.name}.`);
+                addLog(`MIDI input connected: ${selectedInput.name}.`);
             } else {
-                addLog('Ausgewähltes MIDI-Eingangsgerät nicht verfügbar.');
+                addLog('Selected MIDI input device not available.');
             }
         } else {
-            addLog('Kein MIDI-Eingang ausgewählt, keine Signale werden verarbeitet.');
+            addLog('No MIDI input selected. MIDI messages will not be processed.');
         }
         saveSettings();
     } catch (err) {
-        addLog(`MIDI-Fehler: ${err}`);
+        addLog(`MIDI connection error: ${err}`);
     }
 }
 
@@ -382,9 +382,9 @@ async function updateVideoEncodingParameters(fullscreen = false) {
         const quality = fullscreen ? VIDEO_QUALITY.FULLSCREEN : VIDEO_QUALITY.DEFAULT;
         parameters.encodings[0].maxBitrate = quality.maxBitrate;
         await videoSender.setParameters(parameters);
-        addLog(`Videoqualität angepasst auf: ${fullscreen ? 'Vollbild' : 'Standard'} (${(quality.maxBitrate / 1000000).toFixed(1)} Mbps)`);
+        addLog(`Video encoding updated to: ${fullscreen ? 'Fullscreen' : 'Standard'} (${(quality.maxBitrate / 1000000).toFixed(1)} Mbps)`);
     } catch (err) {
-        addLog(`Fehler bei der Anpassung der Videoqualität: ${err.message}`);
+        addLog(`Error updating video encoding parameters: ${err.message}`);
     }
 }
 
@@ -393,18 +393,18 @@ async function startConnection() {
     if (pc) {
         pc.close();
         pc = null;
-        addLog('Alte WebRTC-Verbindung geschlossen');
+        addLog('Previous RTCPeerConnection closed.');
     }
     if (ws) {
         ws.close();
         ws = null;
-        addLog('Alter WebSocket geschlossen');
+        addLog('Previous WebSocket connection closed.');
     }
 
     if (!localStream) {
         const mediaReady = await startMedia();
         if (!mediaReady) {
-            addLog('Media-Setup fehlgeschlagen. Verbindung abgebrochen.');
+            addLog('Media setup failed. Aborting connection.');
             resetConnectionUI();
             return;
         }
@@ -412,14 +412,14 @@ async function startConnection() {
 
     const serverUrl = serverUrlInput.value.trim();
     if (!serverUrl) {
-        addLog('Server-URL fehlt. Gib mal was ein!');
+        addLog('Server URL is missing. Please enter a valid URL.');
         resetConnectionUI();
         return;
     }
 
     const parsed = parseServerUrl(serverUrl);
     if (!parsed) {
-        addLog('Ungültige Server-URL. Format: http://<ip>:<port> oder https://<domain>');
+        addLog('Invalid server URL. Expected format: http://<ip>:<port> or https://<domain>');
         resetConnectionUI();
         return;
     }
@@ -427,7 +427,7 @@ async function startConnection() {
 
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
-    startConnectionButton.innerHTML = 'Warte <img src="assets/throbber.gif" alt="Warten" class="throbber">';
+    startConnectionButton.innerHTML = 'Connecting <img src="assets/throbber.gif" alt="Waiting" class="throbber">';
     serverUrlInput.disabled = true;
 
     pc = new RTCPeerConnection({
@@ -436,88 +436,88 @@ async function startConnection() {
     let pendingIceCandidates = [];
 
     const trackPromises = localStream.getTracks().map(track => {
-        addLog(`Track hinzufügt: ${track.kind}`);
+        addLog(`Adding track: ${track.kind}`);
         return pc.addTrack(track, localStream);
     });
     await Promise.all(trackPromises);
-    addLog('Alle Tracks hinzugefügt.');
+    addLog('All local tracks added to peer connection.');
 
     const protocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
     ws = new WebSocket(`${protocol}://${serverIp}:${serverPort}`);
 
     ws.onopen = async () => {
-        addLog('WebSocket offen.');
+        addLog('WebSocket connection opened.');
         try {
-            addLog(`RTCPeerConnection Zustand vor Offer: ${pc.signalingState}`);
+            addLog(`RTCPeerConnection state before createOffer: ${pc.signalingState}`);
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            addLog(`LocalDescription gesetzt: ${pc.localDescription.type}`);
+            addLog(`LocalDescription set: ${pc.localDescription.type}`);
             ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
-            addLog('Offer gesendet.');
+            addLog('Offer sent.');
         } catch (err) {
-            addLog(`Fehler bei Offer-Erstellung: ${err}`);
+            addLog(`Error creating offer: ${err}`);
             resetConnectionUI();
         }
     };
     ws.onerror = (err) => {
-        addLog(`WebSocket Fehler: ${err.message || err}`);
+        addLog(`WebSocket error: ${err.message || err}`);
         resetConnectionUI();
     };
     ws.onclose = () => {
-        addLog('WebSocket zu.');
+        addLog('WebSocket connection closed.');
         resetConnectionUI();
     };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
-        addLog(`Nachricht empfangen: ${JSON.stringify(msg)}`);
+        addLog(`Received WebSocket message: ${JSON.stringify(msg)}`);
         if (msg.type === 'error') {
-            addLog(`Server-Fehler: ${msg.message}`);
+            addLog(`Server error: ${msg.message}`);
             resetConnectionUI();
             return;
         }
         if (msg.type === 'disconnected-by-peer') {
-            addLog('Verbindung von Peer getrennt.');
+            addLog('Connection closed by peer.');
             disconnect();
             return;
         }
         if (msg.type === 'offer') {
             try {
-                addLog(`RTCPeerConnection Zustand vor setRemoteDescription (offer): ${pc.signalingState}`);
+                addLog(`RTCPeerConnection state before setRemoteDescription (offer): ${pc.signalingState}`);
                 await pc.setRemoteDescription(new RTCSessionDescription(msg));
-                addLog('RemoteDescription (offer) gesetzt.');
+                addLog('RemoteDescription (offer) set.');
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                addLog(`LocalDescription (answer) gesetzt: ${pc.localDescription.type}`);
+                addLog(`LocalDescription (answer) set: ${pc.localDescription.type}`);
                 ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
-                addLog('Answer gesendet.');
+                addLog('Answer sent.');
                 while (pendingIceCandidates.length > 0) {
                     const candidate = pendingIceCandidates.shift();
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+                    addLog('Queued ICE candidate added.');
                 }
             } catch (err) {
-                addLog(`Fehler bei Offer-Verarbeitung: ${err}`);
+                addLog(`Error processing offer: ${err}`);
             }
         } else if (msg.type === 'answer') {
             try {
-                addLog(`RTCPeerConnection Zustand vor setRemoteDescription (answer): ${pc.signalingState}`);
+                addLog(`RTCPeerConnection state before setRemoteDescription (answer): ${pc.signalingState}`);
                 await pc.setRemoteDescription(new RTCSessionDescription(msg));
-                addLog('RemoteDescription (answer) gesetzt.');
+                addLog('RemoteDescription (answer) set.');
                 while (pendingIceCandidates.length > 0) {
                     const candidate = pendingIceCandidates.shift();
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    addLog('Gepufferter ICE-Kandidat hinzugefügt.');
+                    addLog('Queued ICE candidate added.');
                 }
             } catch (err) {
-                addLog(`Fehler bei Answer-Verarbeitung: ${err}`);
+                addLog(`Error processing answer: ${err}`);
             }
         } else if (msg.type === 'candidate') {
             if (pc.remoteDescription) {
                 await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-                addLog('ICE-Kandidat empfangen und hinzugefügt.');
+                addLog('ICE candidate received and added.');
             } else {
                 pendingIceCandidates.push(msg.candidate);
-                addLog('ICE-Kandidat gepuffert, warte auf remoteDescription.');
+                addLog('ICE candidate queued, awaiting remoteDescription.');
             }
         }
     };
@@ -525,16 +525,16 @@ async function startConnection() {
     pc.onicecandidate = (event) => {
         if (event.candidate && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
-            addLog('ICE-Kandidat gesendet.');
+            addLog('ICE candidate sent.');
         }
     };
     pc.ontrack = (event) => {
-        addLog('Remote-Stream empfangen, setze auf remoteVideo');
+        addLog('Remote stream received. Attaching to remoteVideo element.');
         remoteVideo.srcObject = event.streams[0];
-        remoteVideo.play().catch(err => addLog(`Fehler beim Abspielen von remoteVideo: ${err}`));
+        remoteVideo.play().catch(err => addLog(`Error playing remote video stream: ${err}`));
     };
     pc.oniceconnectionstatechange = () => {
-        addLog(`ICE-Verbindungsstatus: ${pc.iceConnectionState}`);
+        addLog(`ICE connection state change: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             isFileSharingReady = true;
             enableFileSharing();
@@ -543,7 +543,7 @@ async function startConnection() {
             startConnectionButton.disabled = false;
             startConnectionButton.style.backgroundColor = '#9D1919';
             startConnectionButton.style.color = '#ffffff';
-            startConnectionButton.innerHTML = 'Verbindung trennen';
+            startConnectionButton.innerHTML = 'Disconnect';
             serverUrlInput.style.display = 'none';
             document.querySelector('label[for="serverUrl"]').style.display = 'none';
             updateVideoEncodingParameters(false);
@@ -552,7 +552,7 @@ async function startConnection() {
             disableFileSharing();
             toggleMetronomeButton.disabled = true;
             remoteVideo.srcObject = null;
-            addLog('Remote-Video zurückgesetzt wegen ICE-Statusänderung');
+            addLog('Remote video reset due to ICE state change.');
             resetConnectionUI();
         }
     };
@@ -588,31 +588,31 @@ async function startConnection() {
 function disconnect() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'disconnect-all' }));
-        addLog('Disconnect-All gesendet.');
+        addLog('Disconnect-All message sent.');
     }
     if (pc) {
         pc.close();
         pc = null;
-        addLog('WebRTC-Verbindung getrennt.');
+        addLog('WebRTC connection closed.');
     }
     if (ws) {
         ws.close();
         ws = null;
-        addLog('WebSocket-Verbindung getrennt.');
+        addLog('WebSocket connection closed.');
     }
     remoteVideo.srcObject = null;
     remoteVideo.load();
-    addLog('remoteVideo zurückgesetzt und geladen');
+    addLog('remoteVideo element reset and loaded');
     if (audioContext) {
         audioContext.close();
         audioContext = null;
         gainNode = null;
-        addLog('AudioContext geschlossen.');
+        addLog('AudioContext closed.');
     }
     if (midiAccess) {
         const inputs = Array.from(midiAccess.inputs.values());
         inputs.forEach(input => input.onmidimessage = null);
-        addLog('MIDI-Handler zurückgesetzt.');
+        addLog('MIDI message handlers cleared.');
     }
     midiChannel = null;
     fileChannel = null;
@@ -642,10 +642,10 @@ function resetConnectionUI() {
 
 function setupMidiChannel(channel) {
     channel.binaryType = 'arraybuffer';
-    channel.onopen = () => addLog('MIDI-Kanal offen.');
+    channel.onopen = () => addLog('MIDI data channel opened.');
     channel.onmessage = (event) => {
         const midiData = new Uint8Array(event.data);
-        addLog(`MIDI vom anderen empfangen: [${midiData}]`);
+        addLog(`Remote MIDI message received: [${midiData}]`);
         pianos.getMIDIMessage({ data: midiData }, 'remote');
         if (midiAccess && midiOutputSelect.value) {
             const selectedOutputId = midiOutputSelect.value;
@@ -653,42 +653,42 @@ function setupMidiChannel(channel) {
             const selectedOutput = outputs.find(output => output.id === selectedOutputId);
             if (selectedOutput) {
                 selectedOutput.send(midiData);
-                addLog(`MIDI an ${selectedOutput.name} gesendet.`);
+                addLog(`Forwarded MIDI message to output: ${selectedOutput.name}.`);
             }
         }
     };
-    channel.onerror = (err) => addLog(`MIDI-Kanal Fehler: ${err.message || err}`);
-    channel.onclose = () => addLog('MIDI-Kanal zu.');
+    channel.onerror = (err) => addLog(`MIDI data channel error: ${err.message || err}`);
+    channel.onclose = () => addLog('MIDI data channel closed.');
 }
 
 function setupChatChannel(channel) {
-    channel.onopen = () => addLog('Chat-Kanal offen.');
+    channel.onopen = () => addLog('Chat data channel opened.');
     channel.onmessage = (event) => {
         const message = event.data;
-        addChatMessage(`Anderer Digga: ${message}`);
+        addChatMessage(`Peer: ${message}`);
     };
-    channel.onerror = (err) => addLog(`Chat-Kanal Fehler: ${err.message || err}`);
-    channel.onclose = () => addLog('Chat-Kanal zu.');
+    channel.onerror = (err) => addLog(`Chat data channel error: ${err.message || err}`);
+    channel.onclose = () => addLog('Chat data channel closed.');
 }
 
 function setupMetronomeChannel(channel) {
     channel.onopen = () => {
-        addLog('Metronom-Kanal offen.');
+        addLog('Metronome data channel opened.');
         sendMetronomeState();
     };
     channel.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'metronome_sync') {
-            addLog(`Metronom-Sync empfangen: ${JSON.stringify(msg.data)}`);
+            addLog(`Metronome sync received: ${JSON.stringify(msg.data)}`);
             isMetronomeVisible = msg.data.visible;
             metronomeContainer.classList.toggle('visible', isMetronomeVisible);
             toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
             metronome.setState(msg.data, true);
         }
     };
-    channel.onerror = (err) => addLog(`Metronom-Kanal Fehler: ${err.message || err}`);
+    channel.onerror = (err) => addLog(`Metronome data channel error: ${err.message || err}`);
     channel.onclose = () => {
-         addLog('Metronom-Kanal zu.');
+         addLog('Metronome data channel closed.');
         toggleMetronomeButton.disabled = true;
         metronomeContainer.classList.remove('visible');
         toggleMetronomeButton.classList.remove('active');
@@ -702,7 +702,7 @@ let activeReceives = new Map();
 function setupFileChannel(channel) {
     channel.binaryType = 'arraybuffer';
     channel.onopen = () => {
-        addLog('File-Kanal offen.');
+        addLog('File data channel opened.');
         isFileSharingReady = true;
         enableFileSharing();
     };
@@ -722,7 +722,7 @@ function setupFileChannel(channel) {
                 receivedBytes: 0
             };
             activeReceives.set(fileId, fileInfo);
-            addLog(`Datei-Info empfangen: ${info.fileName}, ${info.totalBytes} Bytes`);
+            addLog(`Receiving file info: ${info.fileName}, ${info.totalBytes} bytes`);
         } else if (header === 'C') {
             for (const [fileId, fileInfo] of activeReceives) {
                 const chunk = data.slice(1);
@@ -735,8 +735,8 @@ function setupFileChannel(channel) {
                 if (fileInfo.receivedBytes === fileInfo.totalBytes) {
                     const fileData = new Blob(fileInfo.chunks);
                     finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                    addLog(`Datei komplett empfangen: ${info.fileName}`);
-                    fileReceiveSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+                    addLog(`File reception complete: ${info.fileName}`);
+                    fileReceiveSound.play().catch(err => addLog(`Audio playback error: ${err}`));
                     activeReceives.delete(fileId);
                 }
                 break;
@@ -744,12 +744,12 @@ function setupFileChannel(channel) {
         }
     };
     channel.onerror = (err) => {
-        addLog(`File-Kanal Fehler: ${err.message || err}`);
+        addLog(`File data channel error: ${err.message || err}`);
         isFileSharingReady = false;
         disableFileSharing();
     };
     channel.onclose = () => {
-        addLog('File-Kanal zu.');
+        addLog('File data channel closed.');
         isFileSharingReady = false;
         disableFileSharing();
     };
@@ -759,14 +759,14 @@ function enableFileSharing() {
     fileList.style.backgroundColor = '#0F0F0F';
     fileList.style.opacity = '1';
     fileList.querySelector('p').textContent = 'Drop file here';
-    addLog('Filesharing aktiviert.');
+    addLog('File sharing enabled.');
 }
 
 function disableFileSharing() {
     fileList.style.backgroundColor = 'transparent';
     fileList.style.opacity = '0.5';
-    fileList.querySelector('p').textContent = 'Filesharing unavailable without connection';
-    addLog('Filesharing deaktiviert.');
+    fileList.querySelector('p').textContent = 'File sharing unavailable without connection';
+    addLog('File sharing disabled.');
 }
 
 function handleDragOver(event) {
@@ -785,7 +785,7 @@ async function handleDrop(event) {
     event.preventDefault();
     fileList.classList.remove('dragover');
     if (!isFileSharingReady) {
-        addLog('Keine Verbindung, Datei kann nicht gesendet werden.');
+        addLog('Cannot send file: no active connection.');
         return;
     }
     const files = event.dataTransfer.files;
@@ -803,7 +803,7 @@ async function handleDrop(event) {
         };
         const infoData = new TextEncoder().encode('I' + JSON.stringify(fileInfo));
         fileChannel.send(infoData);
-        addLog(`Datei-Info gesendet: ${file.name}, ${file.size} Bytes`);
+        addLog(`Sending file info: ${file.name}, ${file.size} bytes`);
 
         const arrayBuffer = await file.arrayBuffer();
         for (let i = 0; i < file.size; i += CHUNK_SIZE) {
@@ -821,8 +821,8 @@ async function handleDrop(event) {
         }
 
         finalizeFileTransfer(fileItem, file.name, file.type, arrayBuffer, true);
-        addLog(`Datei gesendet: ${file.name}`);
-        fileSentSound.play().catch(err => addLog(`Sound Fehler: ${err}`));
+        addLog(`File sent: ${file.name}`);
+        fileSentSound.play().catch(err => addLog(`Audio playback error: ${err}`));
     }
 }
 
@@ -874,7 +874,7 @@ function updateFileProgress(fileItem, percentage, speed) {
     progressBar.parentElement.style.display = 'block';
     progressBar.style.width = `${Math.min(percentage, 100)}%`;
     progressText.textContent = `${Math.round(percentage)}% (${speed.toFixed(2)} MB/s)`;
-    addLog(`Update Fortschritt: ${Math.round(percentage)}%`);
+    addLog(`File transfer progress: ${Math.round(percentage)}%`);
 }
 
 function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
@@ -895,13 +895,13 @@ function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
 function handleFileOpen(fileName, fileType, url) {
     if (fileType.startsWith('image/') || fileType === 'application/pdf' || fileType.startsWith('text/')) {
         window.open(url, '_blank');
-        addLog(`Datei geöffnet: ${fileName}`);
+        addLog(`File opened in new tab: ${fileName}`);
     } else {
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
         link.click();
-        addLog(`Datei heruntergeladen: ${fileName}`);
+        addLog(`File download initiated: ${fileName}`);
     }
 }
 
@@ -919,10 +919,10 @@ function sendChatMessage() {
     const message = messageInput.value.trim();
     if (message && chatChannel && chatChannel.readyState === 'open') {
         chatChannel.send(message);
-        addChatMessage(`Du: ${message}`);
+        addChatMessage(`You: ${message}`);
         messageInput.value = '';
     } else {
-        addLog('Chat-Nachricht nicht gesendet: Kanal nicht offen oder leer!');
+        addLog('Chat message not sent: channel not open or message is empty.');
     }
 }
 
@@ -937,7 +937,7 @@ function sendMetronomeState() {
             }
         };
         metronomeChannel.send(JSON.stringify(payload));
-        addLog(`Metronom-Status gesendet: ${JSON.stringify(payload.data)}`);
+        addLog(`Metronome state sent: ${JSON.stringify(payload.data)}`);
     }
 }
 
@@ -993,7 +993,7 @@ function setEventListeners() {
 
 
     startConnectionButton.addEventListener('click', () => {
-        if (startConnectionButton.innerHTML.includes('Verbindung trennen')) {
+        if (startConnectionButton.innerHTML.includes('Disconnect')) {
             disconnect();
         } else {
             startConnection();
@@ -1052,9 +1052,9 @@ function setEventListeners() {
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
         midiChannel.send(midiData.buffer);
-        addLog(`MIDI von Piano gesendet: [${midiData}]`);
+        addLog(`MIDI message from piano sent: [${midiData}]`);
     } else {
-        addLog('MIDI-Kanal nicht offen, kann nicht senden.');
+        addLog('Cannot send MIDI message: data channel is not open.');
     }
 }
 
@@ -1063,7 +1063,7 @@ async function init() {
     await populateMidiOptions();
     const mediaReady = await startMedia();
     if (!mediaReady) {
-        addLog('Media-Setup fehlgeschlagen. Check mal Kamera/Mikro.');
+        addLog('Media setup failed. Please check camera/microphone permissions and availability.');
     }
 
     lastMicVolume = micVolume.value;
