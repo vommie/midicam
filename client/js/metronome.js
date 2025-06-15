@@ -1,14 +1,16 @@
 class Metronome {
 
-    constructor(opts) {0
+    constructor(opts) {
         this.opts = opts;
+        this.onStateChange = opts.onStateChange || (() => {});
         this.elements = {};
         this.audio = new Audio();
         this.audio.src = 'assets/samples/metronome/01.wav';
         this.currentBeat = 0;
+        this.running = null;
+        this.isMutedByRemote = false; // Flag to prevent event loops
         this.createTemplate();
         this.addEventListeners();
-        const state = this.insertMetronome();
     }
 
     createTemplate() {
@@ -35,35 +37,24 @@ class Metronome {
     }
 
     addEventListeners() {
-        // Input elements with middle mouse wheel changeable, dblick for edit
-        [
-            this.elements.bpmInput,
-            this.elements.beatsInput
-        ].forEach(input=>{
+        // Input elements with middle mouse wheel changeable, dblclick for edit
+        [this.elements.bpmInput, this.elements.beatsInput].forEach(input => {
             input.addEventListener('wheel', e => {
                 e.preventDefault();
                 const stepSize = e.ctrlKey ? 10 : 1;
-                if(e.deltaY < 0) {
-                    for(let i = 0; i < stepSize; i++) {
-                        input.stepUp();
-                    }
+                if (e.deltaY < 0) {
+                    for (let i = 0; i < stepSize; i++) input.stepUp();
                 } else {
-                    for(let i = 0; i < stepSize; i++) {
-                        input.stepDown();
-                    }
+                    for (let i = 0; i < stepSize; i++) input.stepDown();
                 }
-                input.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
+                input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
             });
-            document.addEventListener('click', e=>{
-                if(!input.contains(e.target)) {
-                    input.readOnly = true;
-                }
+            document.addEventListener('click', e => {
+                if (!input.contains(e.target)) input.readOnly = true;
             });
-            input.addEventListener('dblclick', e=>{
-                input.readOnly = false;
-            });
-            input.addEventListener('focus', (e)=> {
-                if(input.readOnly) e.target.blur();
+            input.addEventListener('dblclick', e => { input.readOnly = false; });
+            input.addEventListener('focus', (e) => {
+                if (input.readOnly) e.target.blur();
             });
         });
 
@@ -71,27 +62,68 @@ class Metronome {
             const bpm = parseInt(this.elements.bpmInput.value);
             this.elements.bpmName.textContent = this.getTempoName(bpm);
             localStorage.setItem('metronomeBpm', bpm);
-            if(!this.elements.playBtn.classList.contains('paused')) this.changeTempo();
+            if (!this.elements.playBtn.classList.contains('paused')) this.changeTempo();
+            this.notifyStateChange();
         });
 
-        this.elements.playBtn.addEventListener('click', e=>{
-            if(this.elements.playBtn.classList.contains('paused')) this.start();
+        this.elements.playBtn.addEventListener('click', e => {
+            if (this.elements.playBtn.classList.contains('paused')) this.start();
             else this.pause();
+            this.notifyStateChange();
         });
 
         this.elements.beatsInput.addEventListener('input', (e) => {
             const beats = parseInt(this.elements.beatsInput.value);
             localStorage.setItem('metronomeBeats', beats);
             this.changeBeatVisualsAmount(beats);
-            if(!this.elements.playBtn.classList.contains('paused')) this.changeTempo();
+            if (!this.elements.playBtn.classList.contains('paused')) this.changeTempo();
+            this.notifyStateChange();
         });
-
     }
 
-    insertMetronome() {
-        const container = document.querySelector(this.opts.selector);
-        if(!container) return false;
-        container.appendChild(this.elements.container);
+    insertInto(containerElement) {
+        if (!containerElement) return false;
+        containerElement.appendChild(this.elements.container);
+        return true;
+    }
+
+    getState() {
+        return {
+            bpm: parseInt(this.elements.bpmInput.value),
+            beats: parseInt(this.elements.beatsInput.value),
+            isPlaying: !this.elements.playBtn.classList.contains('paused')
+        };
+    }
+
+    setState(state, fromRemote = false) {
+        this.isMutedByRemote = fromRemote;
+
+        if (this.elements.bpmInput.value != state.bpm) {
+            this.elements.bpmInput.value = state.bpm;
+            this.elements.bpmName.textContent = this.getTempoName(state.bpm);
+            localStorage.setItem('metronomeBpm', state.bpm);
+        }
+
+        if (this.elements.beatsInput.value != state.beats) {
+            this.elements.beatsInput.value = state.beats;
+            this.changeBeatVisualsAmount(state.beats);
+            localStorage.setItem('metronomeBeats', state.beats);
+        }
+
+        const currentlyPlaying = !this.elements.playBtn.classList.contains('paused');
+        if (currentlyPlaying !== state.isPlaying) {
+            if (state.isPlaying) this.start();
+            else this.pause();
+        } else if (state.isPlaying) {
+            this.changeTempo();
+        }
+
+        this.isMutedByRemote = false;
+    }
+
+    notifyStateChange() {
+        if (this.isMutedByRemote) return;
+        this.onStateChange(this.getState());
     }
 
     start() {
@@ -101,7 +133,8 @@ class Metronome {
 
     pause() {
         this.currentBeat = 1;
-        clearInterval(this.running);
+        if (this.running) clearInterval(this.running);
+        this.running = null;
         this.audio.currentTime = 0;
         this.audio.pause();
         this.elements.playBtn.classList.add('paused');
@@ -109,14 +142,14 @@ class Metronome {
     }
 
     changeTempo() {
-        if(this.running) clearInterval(this.running);
+        if (this.running) clearInterval(this.running);
         this.currentBeat = 1;
         this.setBeatVisual();
         this.audio.currentTime = 0;
         this.audio.play();
-        this.running = setInterval(()=>{
+        this.running = setInterval(() => {
             this.currentBeat++;
-            if(this.currentBeat > parseInt(this.elements.beatsInput.value)) this.currentBeat = 1;
+            if (this.currentBeat > parseInt(this.elements.beatsInput.value)) this.currentBeat = 1;
             this.audio.currentTime = 0;
             this.audio.play();
             this.setBeatVisual();
@@ -124,30 +157,23 @@ class Metronome {
     }
 
     setBeatVisual() {
-        this.elements.beatVisuals.forEach(visual=>{
-            if(!this.elements.playBtn.classList.contains('paused') && visual.dataset.id == this.currentBeat) visual.classList.add('active');
+        this.elements.beatVisuals.forEach(visual => {
+            if (!this.elements.playBtn.classList.contains('paused') && visual.dataset.id == this.currentBeat) visual.classList.add('active');
             else visual.classList.remove('active');
         });
     }
 
     changeBeatVisualsAmount(beats) {
-        if(this.elements.beatVisuals && this.elements.beatVisuals.length === beats) return;
+        if (this.elements.beatVisuals && this.elements.beatVisuals.length === beats) return;
         let beatsHtml = '';
-        for(let i = 1; i <= beats; i++) {
+        for (let i = 1; i <= beats; i++) {
             beatsHtml = `${beatsHtml}<div class="beat-visual" data-id="${i}"></div>`;
         }
         this.elements.beatVisualsContainer.innerHTML = beatsHtml;
         this.elements.beatVisuals = this.elements.beatVisualsContainer.querySelectorAll('.beat-visual');
-
     }
 
-    /**
-     * Gets the tempo of the metronome
-     *
-     * @param {string} type Tempo as "bpm" or in "ms" (milliseconds)
-     * @returns {int}
-     */
-    getTempo(type='bpm') {
+    getTempo(type = 'bpm') {
         const bpm = parseInt(this.elements.bpmInput.value);
         return type === 'ms' ? 60000 / bpm : bpm;
     }
@@ -216,6 +242,4 @@ class Metronome {
 
 }
 
-export {
-    Metronome
-}
+export { Metronome }

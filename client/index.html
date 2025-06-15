@@ -11,6 +11,7 @@
 </head>
 <body>
     <main>
+        <div id="metronomeContainer"></div>
         <section id="cams">
             <video id="remoteVideo" autoplay></video>
             <div id="localVideoWrapper">
@@ -60,6 +61,10 @@
                     <input type="text" id="messageInput" placeholder="Nachricht eingeben" required aria-required="true">
                     <button type="submit">Senden</button>
                 </form>
+            </section>
+            <section id="tools">
+                 <div class="title">Tools</div>
+                 <button id="toggleMetronome" disabled>Metronom</button>
             </section>
             <section id="log">
                 <div class="title">Log</div>

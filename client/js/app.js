@@ -15,10 +15,14 @@ const midiOutputSelect = document.getElementById('midiOutputSelect');
 const fileList = document.getElementById('fileList');
 const serverUrlInput = document.getElementById('serverUrl');
 const startConnectionButton = document.getElementById('startConnection');
+const toggleMetronomeButton = document.getElementById('toggleMetronome');
+const metronomeContainer = document.getElementById('metronomeContainer');
+
 let pc;
 let midiChannel;
 let fileChannel;
 let chatChannel;
+let metronomeChannel;
 let localStream;
 let audioContext;
 let gainNode;
@@ -26,9 +30,11 @@ let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
 let isFileSharingReady = false;
+let isMetronomeVisible = false;
 let ws;
 const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
+let metronome;
 
 const fileSentSound = new Audio('assets/file_sent.wav');
 const fileReceiveSound = new Audio('assets/file_receive.wav');
@@ -82,6 +88,7 @@ function loadSettings() {
     return { serverUrl: 'http://localhost:8080' };
 }
 
+// ... (populateDeviceOptions, populateMidiOptions, startMedia, switchMedia, adjustMicVolume, connectMidi bleiben gleich) ...
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -535,6 +542,7 @@ async function startConnection() {
             isFileSharingReady = true;
             enableFileSharing();
             connectMidi();
+            toggleMetronomeButton.disabled = false;
             startConnectionButton.disabled = false;
             startConnectionButton.style.backgroundColor = '#9D1919';
             startConnectionButton.style.color = '#ffffff';
@@ -544,6 +552,7 @@ async function startConnection() {
         } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
             isFileSharingReady = false;
             disableFileSharing();
+            toggleMetronomeButton.disabled = true;
             remoteVideo.srcObject = null;
             addLog('Remote-Video zurückgesetzt wegen ICE-Statusänderung');
             resetConnectionUI();
@@ -556,6 +565,8 @@ async function startConnection() {
     setupFileChannel(fileChannel);
     chatChannel = pc.createDataChannel('chatChannel', { ordered: true });
     setupChatChannel(chatChannel);
+    metronomeChannel = pc.createDataChannel('metronomeChannel', { ordered: true });
+    setupMetronomeChannel(metronomeChannel);
 
     pc.ondatachannel = (event) => {
         if (event.channel.label === 'midiChannel') {
@@ -567,6 +578,9 @@ async function startConnection() {
         } else if (event.channel.label === 'chatChannel') {
             chatChannel = event.channel;
             setupChatChannel(chatChannel);
+        } else if (event.channel.label === 'metronomeChannel') {
+            metronomeChannel = event.channel;
+            setupMetronomeChannel(metronomeChannel);
         }
     };
 
@@ -605,6 +619,7 @@ function disconnect() {
     midiChannel = null;
     fileChannel = null;
     chatChannel = null;
+    metronomeChannel = null;
     isFileSharingReady = false;
     disableFileSharing();
     resetConnectionUI();
@@ -617,6 +632,14 @@ function resetConnectionUI() {
     serverUrlInput.disabled = false;
     serverUrlInput.style.display = 'block';
     document.querySelector('label[for="serverUrl"]').style.display = 'block';
+
+    toggleMetronomeButton.disabled = true;
+    toggleMetronomeButton.classList.remove('active');
+    metronomeContainer.classList.remove('visible');
+    isMetronomeVisible = false;
+    if (metronome) {
+        metronome.pause();
+    }
 }
 
 function setupMidiChannel(channel) {
@@ -649,6 +672,30 @@ function setupChatChannel(channel) {
     channel.onerror = (err) => addLog(`Chat-Kanal Fehler: ${err.message || err}`);
     channel.onclose = () => addLog('Chat-Kanal zu.');
 }
+
+function setupMetronomeChannel(channel) {
+    channel.onopen = () => addLog('Metronom-Kanal offen.');
+    channel.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'metronome_sync') {
+            addLog(`Metronom-Sync empfangen: ${JSON.stringify(msg.data)}`);
+            isMetronomeVisible = msg.data.visible;
+            metronomeContainer.classList.toggle('visible', isMetronomeVisible);
+            toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
+            metronome.setState(msg.data, true); // true, um Endlosschleife zu verhindern
+        }
+    };
+    channel.onerror = (err) => addLog(`Metronom-Kanal Fehler: ${err.message || err}`);
+    channel.onclose = () => {
+         addLog('Metronom-Kanal zu.');
+        toggleMetronomeButton.disabled = true;
+        metronomeContainer.classList.remove('visible');
+        toggleMetronomeButton.classList.remove('active');
+        isMetronomeVisible = false;
+        if(metronome) metronome.pause();
+    };
+}
+
 
 let activeReceives = new Map();
 
@@ -879,6 +926,21 @@ function sendChatMessage() {
     }
 }
 
+function sendMetronomeState() {
+    if (metronomeChannel && metronomeChannel.readyState === 'open') {
+        const state = metronome.getState();
+        const payload = {
+            type: 'metronome_sync',
+            data: {
+                ...state,
+                visible: isMetronomeVisible
+            }
+        };
+        metronomeChannel.send(JSON.stringify(payload));
+        addLog(`Metronom-Status gesendet: ${JSON.stringify(payload.data)}`);
+    }
+}
+
 function setEventListeners() {
     const chatForm = document.querySelector('#chat-form');
     chatForm.addEventListener('submit', (e) => {
@@ -899,6 +961,17 @@ function setEventListeners() {
         } else {
             startConnection();
         }
+    });
+
+    toggleMetronomeButton.addEventListener('click', () => {
+        isMetronomeVisible = !isMetronomeVisible;
+        metronomeContainer.classList.toggle('visible', isMetronomeVisible);
+        toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
+
+        if (!isMetronomeVisible) {
+            metronome.pause();
+        }
+        sendMetronomeState();
     });
 
     fileList.addEventListener('dragover', handleDragOver);
@@ -940,9 +1013,12 @@ async function init() {
         'sendMidiMessage': sendMidiMessage
     });
 
-    const metronome = new Metronome({
-        'selector': '#metronome'
+    metronome = new Metronome({
+        onStateChange: (state) => {
+            sendMetronomeState();
+        }
     });
+    metronome.insertInto(metronomeContainer);
 
     new CamLocalDrag();
 
