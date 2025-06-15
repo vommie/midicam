@@ -93,35 +93,17 @@ class Pianos {
         }
     }
 
-    noteOn = (note, velocity, src='local') => {
+    noteOn = (note, velocity, src = 'local') => {
         console.log('Note On: ', note, ', Velocity: ', velocity);
-        this.pianos.forEach(piano=>{
-            piano.elements.keys.forEach(keyElement=>{
-                if(keyElement.dataset.midiNote == note) {
-                    if(piano.opts.enableMidi) {
-                        piano.addKeyPressedStyle(keyElement, velocity, src);
-                        if(piano.pressedKeys.indexOf(keyElement.dataset.id) === -1) piano.pressedKeys.push(keyElement.dataset.id);
-                    }
-                    piano.playNote(keyElement.dataset.id, velocity);
-                }
-            });
+        this.pianos.forEach(piano => {
+            piano.handleNoteOn(note, velocity, src);
         });
     }
 
     noteOff = (note) => {
         console.log('Note Off: ', note);
-        this.pianos.forEach(piano=>{
-            piano.elements.keys.forEach(keyElement=>{
-                if(keyElement.dataset.midiNote == note) {
-                    if(piano.opts.enableMidi) {
-                        piano.removeKeyPressedStyle(keyElement);
-                        piano.pressedKeys.splice(piano.pressedKeys.indexOf(keyElement.dataset.id), 1);
-                    }
-                    if(piano.opts.playMidiNotes) {
-                        piano.stopNote(keyElement.dataset.id);
-                    }
-                }
-            });
+        this.pianos.forEach(piano => {
+            piano.handleNoteOff(note);
         });
     }
 
@@ -335,12 +317,12 @@ class Piano {
     }
 
     insertKeys() {
-        let fromKey = this.opts.fromKey != undefined && this.opts.fromKey >= 1 ? this.opts.fromKey : 1;
-        let toKey = this.opts.toKey && this.opts.toKey <= 88 ? this.opts.toKey : 88;
-        console.log(`piano ${this.id}: insert keys from index ${fromKey} to ${toKey} ...`);
-        for(let i = fromKey; i <= toKey; i++) {
-            if(this.keys[i] == undefined) return;
-            this.insertKey(i, i === fromKey, i === toKey);
+        const fromKey = this.opts.fromKey;
+        const toKey = this.opts.toKey;
+        console.log(`piano ${this.id}: rendering all 88 keys, active range from ${fromKey} to ${toKey}`);
+        for (let i = 1; i <= 88; i++) {
+            if (this.keys[i] == undefined) return;
+            this.insertKey(i, i === 1, i === 88);
         }
     }
 
@@ -373,10 +355,15 @@ class Piano {
         let key = this.templates.pianoKey.cloneNode(true);
         if(id) {
             key.dataset.id = id;
-            key.dataset.midiNote = id+20;
-            key.addEventListener('mousedown', e=>{ this.onKeyPress(e); });
-            key.addEventListener('mouseup', e=>{ this.onKeyRelease(e); });
-            key.addEventListener('mousemove', e=>{ this.onMouseMove(e); });
+            key.dataset.midiNote = id + 20;
+
+            if (!this.isKeyInRange(id)) {
+                key.classList.add('out-of-range');
+            }
+
+            key.addEventListener('mousedown', e => { this.onKeyPress(e); });
+            key.addEventListener('mouseup', e => { this.onKeyRelease(e); });
+            key.addEventListener('mousemove', e => { this.onMouseMove(e); });
             this.elements.keys[id] = key;
         }
         if(hidden) key.classList.add('hidden');
@@ -550,9 +537,51 @@ class Piano {
         }
     }
 
+    isKeyInRange(id) {
+        const keyId = parseInt(id, 10);
+        return (keyId >= this.opts.fromKey && keyId <= this.opts.toKey);
+    }
+
+    handleNoteOn(note, velocity, src) {
+        const keyId = note - 20;
+        if (!this.isKeyInRange(keyId)) return;
+
+        const keyElement = this.elements.keys[keyId];
+        if (keyElement) {
+            if (this.opts.enableMidi) {
+                this.addKeyPressedStyle(keyElement, velocity, src);
+                if (this.pressedKeys.indexOf(keyElement.dataset.id) === -1) {
+                    this.pressedKeys.push(keyElement.dataset.id);
+                }
+            }
+            this.playNote(keyId, velocity);
+        }
+    }
+
+    handleNoteOff(note) {
+        const keyId = note - 20;
+        if (!this.isKeyInRange(keyId)) return;
+
+        const keyElement = this.elements.keys[keyId];
+        if (keyElement) {
+            if (this.opts.enableMidi) {
+                this.removeKeyPressedStyle(keyElement);
+                const index = this.pressedKeys.indexOf(keyElement.dataset.id);
+                if (index > -1) {
+                    this.pressedKeys.splice(index, 1);
+                }
+            }
+            if (this.opts.playMidiNotes) {
+                this.stopNote(keyElement.dataset.id);
+            }
+        }
+    }
+
     onKeyPress(e) {
-        if(e.which != 1) return;
+        if (e.which != 1) return;
         let id = e.currentTarget.dataset.id;
+        if (!this.isKeyInRange(id)) return;
+
         this.lastKeyId = id;
         console.log(`piano ${this.id}: key ${id} pressed: ${this.getKeyName(id, true)}`);
         this.addKeyPressedStyle(this.elements.keys[id]);
@@ -561,8 +590,10 @@ class Piano {
     }
 
     onKeyRelease(e) {
-        if(e.which != 1) return;
+        if (e.which != 1) return;
         let id = e.currentTarget.dataset.id;
+        if (!this.isKeyInRange(id)) return;
+
         console.log(`piano ${this.id}: key ${id} released: ${this.getKeyName(id, true)}`);
         this.removeKeyPressedStyle(this.elements.keys[id]);
         this.stopNote(id);
@@ -570,9 +601,11 @@ class Piano {
     }
 
     onMouseMove(e) {
-        if(!this.mouseIsDown || e.which != 1) return;
+        if (!this.mouseIsDown || e.which != 1) return;
         let id = e.currentTarget.dataset.id;
-        if(id == this.lastKeyId) return;
+        if (!this.isKeyInRange(id)) return;
+        if (id == this.lastKeyId) return;
+
         console.log(`piano ${this.id}: gliss from key ${this.lastKeyId} (${this.getKeyName(this.lastKeyId, true)}) to ${id} (${this.getKeyName(id, true)})`);
         this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
         this.stopNote(this.lastKeyId);

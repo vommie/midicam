@@ -226,15 +226,10 @@
     transition: box-shadow .2s;
 }
 
-.bar.white .piano-key:hover,
-.bar.white .piano-key .key-pressed:hover {
+.bar.white .piano-key:hover ,
+.bar.white .piano-key.active .key-pressed:hover {
     background: var(--local-hover-color-white) !important;
 }
-
-/* .bar.white .piano-key.active {
-    box-shadow: inset 3px -3px 10px 5px rgba(0, 0, 0, 0.28);
-    transition: box-shadow .2s;
-} */
 
 .bar.white .piano-key:last-of-type {
     border-right: 1px solid black;
@@ -256,14 +251,9 @@
 }
 
 .bar.black .piano-key:hover,
-.bar.black .piano-key .key-pressed:hover {
+.bar.black .piano-key.active .key-pressed:hover {
     background: var(--local-hover-color-black) !important;
 }
-
-/* .bar.black .piano-key.active {
-    box-shadow:inset 0px -2px 11px rgba(255, 255, 255, .5);
-    transition: box-shadow .2s;
-} */
 
 .bar.black .piano-key.hidden {
     visibility: hidden;
@@ -320,4 +310,24 @@
 .piano.soft .bar {
     transform: translateX(.5%);
     transition: transform .1s linear 0s;
+}
+
+.piano-key.out-of-range {
+    pointer-events: none;
+}
+
+.bar.white .piano-key.out-of-range,
+.bar.white .piano-key.out-of-range:hover {
+    background: #ccc !important;
+}
+
+.bar.black .piano-key.out-of-range,
+.bar.black .piano-key.out-of-range:hover {
+    background: #555 !important;
+}
+
+.piano-key.out-of-range.active,
+.piano-key.out-of-range .key-pressed {
+    background: transparent !important;
+    box-shadow: none !important;
 }
