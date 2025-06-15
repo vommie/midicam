@@ -81,13 +81,13 @@ class Pianos {
                 break;
             case 176: // CC command
                 if(note === 64) { // sustain pedal
-                    this.sustainPedal(velocity);
+                    this.sustainPedal(velocity, src);
                 }
                 else if(note === 66) { // sostenuto pedal
-                    this.sostenutoPedal(velocity === 127);
+                    this.sostenutoPedal(velocity === 127, src);
                 }
                 else if(note === 67) { // soft pedal
-                    this.softPedal(velocity === 127);
+                    this.softPedal(velocity === 127, src);
                 }
                 break;
         }
@@ -125,24 +125,24 @@ class Pianos {
         });
     }
 
-    sustainPedal(velocity) {
-        console.log('Sustain Pedal: ', velocity);
+    sustainPedal(velocity, src) {
+        console.log('Sustain Pedal: ', velocity, 'from', src);
         this.pianos.forEach(piano=>{
-            piano.sustainPedal(velocity, 'local');
+            piano.sustainPedal(velocity, src);
         });
     }
 
-    sostenutoPedal(state) {
-        console.log('Sostenuto Pedal: ', state);
+    sostenutoPedal(state, src) {
+        console.log('Sostenuto Pedal: ', state, 'from', src);
         this.pianos.forEach(piano=>{
-            piano.sostenutoPedal(state, 'local');
+            piano.sostenutoPedal(state, src);
         });
     }
 
-    softPedal(state) {
-        console.log('Soft Pedal: ', state);
+    softPedal(state, src) {
+        console.log('Soft Pedal: ', state, 'from', src);
         this.pianos.forEach(piano=>{
-            piano.softPedal(state, 'local');
+            piano.softPedal(state, src);
         });
     }
 
@@ -515,9 +515,9 @@ class Piano {
             'sostenuto': container.querySelector(`#pedal-sostenuto-${this.id}`),
             'sustain': container.querySelector(`#pedal-sustain-${this.id}`),
         }
-        elements.soft.addEventListener('click', e=>{this.softPedal(null, 'click');});
-        elements.sostenuto.addEventListener('click', e=>{this.sostenutoPedal(null, 'click');});
-        elements.sustain.addEventListener('click', e=>{this.sustainPedal(null, 'click');});
+        elements.soft.addEventListener('click', e=>{this.softPedal(null, 'local');});
+        elements.sostenuto.addEventListener('click', e=>{this.sostenutoPedal(null, 'local');});
+        elements.sustain.addEventListener('click', e=>{this.sustainPedal(null, 'local');});
         return elements;
     }
 
@@ -681,9 +681,14 @@ class Piano {
     softPedal(state, src='local') {
         if(!this.opts.pedalSoft) return;
         const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
-        let activate = false;
-        if(src === 'local') activate = this.elements.pedals.soft.classList.contains('active') ? false : true;
-        else if(state) activate = true;
+
+        let activate;
+        if (src === 'local') {
+            activate = !this.elements.pedals.soft.classList.contains('active');
+        } else {
+            activate = state;
+        }
+
         if(activate) {
             this.elements.pedals.soft.classList.add('active');
             this.elements.pedals.soft.style.background = `rgba(${rgb}, 1)`;
@@ -699,9 +704,14 @@ class Piano {
     sostenutoPedal(state, src='local') {
         if(!this.opts.pedalSostenuto) return;
         const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
-        let activate = false;
-        if(src === 'local') activate = this.elements.pedals.sostenuto.classList.contains('active') ? false : true;
-        if(state) activate = true;
+
+        let activate;
+        if (src === 'local') {
+            activate = !this.elements.pedals.sostenuto.classList.contains('active');
+        } else {
+            activate = state;
+        }
+
         if(activate) {
             this.elements.pedals.sostenuto.classList.add('active');
             this.elements.pedals.sostenuto.style.background = `rgba(${rgb}, 1)`;
@@ -715,9 +725,15 @@ class Piano {
     sustainPedal(velocity, src='local') {
         if(!this.opts.pedalSustain) return;
         const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
-        let activate = false;
-        if(velocity === null && src === 'local') activate = this.elements.pedals.sustain.classList.contains('active') ? false : true;
-        else if(velocity) activate = true;
+
+        let activate;
+        // For local click, velocity is null, so we toggle. For MIDI, velocity is a number.
+        if (src === 'local' && velocity === null) {
+            activate = !this.elements.pedals.sustain.classList.contains('active');
+        } else {
+            activate = velocity > 0;
+        }
+
         if(activate) {
             const transparency = velocity ? this.scaleTransparency(velocity) : '1';
             this.elements.pedals.sustain.classList.add('active');
