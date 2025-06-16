@@ -597,6 +597,21 @@ video:fullscreen {
     background: linear-gradient(to right, #c13434 0%, #c13434 var(--p, 100%), #555 var(--p, 100%), #555 100%);
 }
 
+#sidebar-right .volume-tooltip {
+    position: absolute;
+    display: none;
+    background-color: #111;
+    color: #eee;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    z-index: 2000;
+    pointer-events: none;
+    transform: translate(-50%, calc(-100% - 8px));
+    transition: none;
+}
+
 #sidebar-right [data-tooltip] {
     position: relative;
 }

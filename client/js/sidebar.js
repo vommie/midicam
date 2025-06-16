@@ -12,6 +12,11 @@ export class Sidebar {
         this.boundResize = this.resize.bind(this);
         this.boundStopResize = this.stopResize.bind(this);
 
+        this.volumeTooltipEl = null;
+        this.activeSlider = null;
+        this.boundUpdateVolumeTooltip = this.updateVolumeTooltip.bind(this);
+        this.boundHideVolumeTooltip = this.hideVolumeTooltip.bind(this);
+
         this.init();
     }
 
@@ -19,6 +24,7 @@ export class Sidebar {
         this.initResizing();
         this.initCollapsibleSections();
         this.initTooltips();
+        this.initVolumeTooltips();
         this.loadState();
         this.sidebar.style.visibility = 'visible';
     }
@@ -73,6 +79,65 @@ export class Sidebar {
                 el.removeAttribute('title');
             }
         });
+    }
+
+    initVolumeTooltips() {
+        const volumeSliders = this.sidebar.querySelectorAll('#volumes input[type="range"]');
+        volumeSliders.forEach(slider => {
+            slider.addEventListener('mousedown', (e) => {
+                this.activeSlider = e.target;
+                this.createVolumeTooltip();
+                this.updateVolumeTooltip();
+                this.volumeTooltipEl.style.display = 'block';
+
+                this.activeSlider.addEventListener('input', this.boundUpdateVolumeTooltip);
+                document.addEventListener('mouseup', this.boundHideVolumeTooltip, { once: true });
+            });
+        });
+    }
+
+    createVolumeTooltip() {
+        if (this.volumeTooltipEl) return;
+        this.volumeTooltipEl = document.createElement('div');
+        this.volumeTooltipEl.className = 'volume-tooltip';
+        this.sidebar.appendChild(this.volumeTooltipEl);
+    }
+
+    updateVolumeTooltip() {
+        if (!this.activeSlider || !this.volumeTooltipEl) return;
+
+        const slider = this.activeSlider;
+        const rect = slider.getBoundingClientRect();
+        const sidebarRect = this.sidebar.getBoundingClientRect();
+
+        const value = parseFloat(slider.value);
+        const min = parseFloat(slider.min) || 0;
+        const max = parseFloat(slider.max) || 1;
+
+        const percentage = Math.round(((value - min) / (max - min)) * 100);
+        this.volumeTooltipEl.textContent = `${percentage}%`;
+
+        const progress = (value - min) / (max - min);
+        const thumbWidth = 18;
+        const trackWidth = rect.width - thumbWidth;
+        const thumbLeft = progress * trackWidth;
+        const tooltipX = rect.left - sidebarRect.left + thumbLeft + (thumbWidth / 2);
+        const tooltipY = rect.top - sidebarRect.top;
+
+        requestAnimationFrame(() => {
+            this.volumeTooltipEl.style.left = `${tooltipX}px`;
+            this.volumeTooltipEl.style.top = `${tooltipY}px`;
+        });
+    }
+
+    hideVolumeTooltip() {
+        if (this.volumeTooltipEl) {
+            this.volumeTooltipEl.style.display = 'none';
+        }
+        if (this.activeSlider) {
+            this.activeSlider.removeEventListener('input', this.boundUpdateVolumeTooltip);
+            this.activeSlider = null;
+        }
     }
 
     saveState() {
