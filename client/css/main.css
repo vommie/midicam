@@ -79,29 +79,27 @@ video:fullscreen {
     margin: 0 auto;
 }
 
-/* NEU: Container für alle Floating Windows */
 #additionalStreamsContainer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* Wichtig, damit Klicks auf den Hintergrund durchgehen */
+    pointer-events: none;
     z-index: 1000;
 }
 
-/* NEU: Styling für die generische Floating-Window-Klasse */
 .floating-window-wrapper {
-    position: absolute; /* Wichtig für die Positionierung via top/right */
-    z-index: 1001; /* Über dem Container, aber unter evtl. Modals */
+    position: absolute;
+    z-index: 1001;
     user-select: none;
     touch-action: none;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     border: 1px solid #555;
     background-color: #1a1a1a;
-    display: flex;
-    flex-direction: column;
-    pointer-events: auto; /* Fenster selbst sollen klickbar sein */
+    pointer-events: auto;
+    display: grid;
+    grid-template-rows: 24px auto;
 }
 
 .floating-window-header {

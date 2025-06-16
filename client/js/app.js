@@ -496,7 +496,7 @@ async function startConnection() {
         }
         if (msg.type === 'stop-stream') {
             addLog(`Peer stopped sharing stream: ${msg.streamId}`);
-            stopScreenShare(msg.streamId, false); // isInitiator = false
+            stopScreenShare(msg.streamId, false);
             return;
         }
         if (msg.type === 'offer') {
@@ -1037,7 +1037,6 @@ function sendMetronomeTick(tickData) {
     }
 }
 
-// NEUE FUNKTION: Screen Share starten
 async function startScreenShare() {
     if (!pc) {
         addLog('Cannot start screen share: no active connection.');
@@ -1047,7 +1046,16 @@ async function startScreenShare() {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
         const track = stream.getVideoTracks()[0];
         const streamId = stream.id;
-        const streamName = track.label || 'Screen Share';
+
+        addLog(`[Debug] Screen share track label from browser: "${track.label}"`);
+
+        let streamName = track.label;
+        const genericLabels = ["internal camera", "bildschirm", "screen"];
+
+        if (!streamName || streamName.trim() === "" || genericLabels.includes(streamName.toLowerCase())) {
+            streamName = "Shared Content";
+            addLog(`Using fallback title for stream: "${streamName}"`);
+        }
 
         const sender = pc.addTrack(track, stream);
         if (!sender) {
@@ -1067,15 +1075,13 @@ async function startScreenShare() {
 
         activeScreenShares.set(streamId, { window: localWindow, sender });
 
-        // Listener, wenn Nutzer das Sharing über den Browser-Button beendet
         track.onended = () => {
             addLog(`Sharing for ${streamName} ended by user.`);
             stopScreenShare(streamId, true);
         };
 
-        // Listener, wenn Nutzer das Sharing über den "X"-Button im Fenster beendet
         localWindow.wrapper.addEventListener('close', () => {
-            track.stop(); // Löst das onended-Event aus, das dann aufräumt
+            track.stop();
         });
 
     } catch (err) {
@@ -1083,7 +1089,6 @@ async function startScreenShare() {
     }
 }
 
-// NEUE FUNKTION: Screen Share beenden
 function stopScreenShare(streamId, isInitiator) {
     const share = activeScreenShares.get(streamId);
     if (!share) return;
