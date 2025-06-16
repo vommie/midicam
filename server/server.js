@@ -3,16 +3,22 @@ const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080 });
 let clients = [];
 
-function disconnectAllClients() {
+function disconnectAllClients(initiatorWs) {
     console.log('Disconnecting all clients based on request.');
     clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'disconnected-by-peer' }));
-            client.close();
+        if (client.ws !== initiatorWs && client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(JSON.stringify({ type: 'disconnected-by-peer' }));
+        }
+        if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.terminate();
         }
     });
     clients = [];
     console.log('All clients disconnected, list cleared.');
+}
+
+function heartbeat() {
+  this.isAlive = true;
 }
 
 wss.on('connection', (ws) => {
@@ -25,7 +31,11 @@ wss.on('connection', (ws) => {
         return;
     }
 
-    clients.push(ws);
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+
+    const clientInfo = { ws: ws };
+    clients.push(clientInfo);
     console.log(`Current participants: ${clients.length}`);
 
     ws.on('message', (message) => {
@@ -37,36 +47,39 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        if (msg.type === 'ping') {
+            return;
+        }
+
         if (msg.sdp) {
              console.log(`Message received: {type: "${msg.type}"}`);
         } else {
              console.log(`Message received: ${JSON.stringify(msg)}`);
         }
 
-
-        if (msg.type === 'disconnect-all') {
-            disconnectAllClients();
+        if (msg.type === 'disconnect' || msg.type === 'disconnect-all') {
+            disconnectAllClients(ws);
         } else {
             clients.forEach((client) => {
-                if (client !== ws && client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify(msg));
+                if (client.ws !== ws && client.ws.readyState === WebSocket.OPEN) {
+                    client.ws.send(JSON.stringify(msg));
                 }
             });
         }
     });
 
     ws.on('close', () => {
-        console.log('Client disconnected.');
-        const index = clients.indexOf(ws);
+        console.log('Client connection closed.');
+        const index = clients.findIndex(c => c.ws === ws);
         if (index > -1) {
             clients.splice(index, 1);
         }
         console.log(`Remaining participants: ${clients.length}`);
 
         clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
+            if (client.ws.readyState === WebSocket.OPEN) {
                 console.log('Informing remaining client about peer disconnection.');
-                client.send(JSON.stringify({ type: 'peer-disconnected' }));
+                client.ws.send(JSON.stringify({ type: 'peer-disconnected' }));
             }
         });
     });
@@ -74,6 +87,21 @@ wss.on('connection', (ws) => {
     ws.on('error', (err) => {
         console.error('WebSocket error:', err.message);
     });
+});
+
+const interval = setInterval(function ping() {
+  wss.clients.forEach(function each(ws) {
+    if (ws.isAlive === false) {
+        console.log("Terminating dead connection.");
+        return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping(function noop() {});
+  });
+}, 30000);
+
+wss.on('close', function close() {
+  clearInterval(interval);
 });
 
 console.log('WebSocket server is running on ws://localhost:8080.');

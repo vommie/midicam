@@ -44,6 +44,7 @@ let ws;
 const CHUNK_SIZE = 65536;
 const MIDI_BUFFER_THRESHOLD = 1024;
 let iceReconnectTimer = null;
+let wsPingInterval = null;
 
 const pianos = new Pianos();
 let metronome;
@@ -458,6 +459,13 @@ async function startConnection() {
 
     ws.onopen = async () => {
         addLog('WebSocket connection opened.');
+        if (wsPingInterval) clearInterval(wsPingInterval);
+        wsPingInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
+
         try {
             addLog(`RTCPeerConnection state before createOffer: ${pc.signalingState}`);
             const offer = await pc.createOffer();
@@ -471,15 +479,18 @@ async function startConnection() {
         }
     };
     ws.onerror = (err) => {
-        addLog(`WebSocket error: ${err.message || err}`);
-        resetConnectionUI();
+        addLog(`WebSocket error: ${err.message || 'Unknown error'}`);
     };
-    ws.onclose = () => {
-        addLog('WebSocket connection closed.');
-        resetConnectionUI();
+    ws.onclose = (event) => {
+        addLog(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason || 'No reason given'}. Was clean: ${event.wasClean}.`);
+        if (pc && pc.connectionState !== 'closed') {
+           disconnect();
+        }
     };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'ping' || msg.type === 'pong') return;
+
         if (msg.sdp) {
              addLog(`Received WebSocket message: {type: "${msg.type}"}`);
         } else {
@@ -488,7 +499,7 @@ async function startConnection() {
 
         if (msg.type === 'error') {
             addLog(`Server error: ${msg.message}`);
-            resetConnectionUI();
+            disconnect();
             return;
         }
         if (msg.type === 'disconnected-by-peer' || msg.type === 'peer-disconnected') {
@@ -675,9 +686,14 @@ async function startConnection() {
 }
 
 function disconnect() {
+    if (wsPingInterval) {
+        clearInterval(wsPingInterval);
+        wsPingInterval = null;
+    }
+
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'disconnect-all' }));
-        addLog('Disconnect-All message sent.');
+        ws.send(JSON.stringify({ type: 'disconnect' }));
+        addLog('Disconnect message sent.');
     }
     for (const streamId of activeScreenShares.keys()) {
         stopScreenShare(streamId, true);
@@ -688,6 +704,7 @@ function disconnect() {
         addLog('WebRTC connection closed.');
     }
     if (ws) {
+        ws.onclose = null;
         ws.close();
         ws = null;
         addLog('WebSocket connection closed.');
