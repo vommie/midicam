@@ -3,12 +3,11 @@ import { Metronome } from "./metronome.js";
 import { CamLocalDrag } from "./camLocalDrag.js";
 import { MetronomeDrag } from "./metronomeDrag.js";
 import { FloatingWindow } from "./floatingWindow.js";
+import { Chat } from './chat.js';
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const log = document.getElementById('log-msgs');
-const chat = document.getElementById('chat-msgs');
-const messageInput = document.getElementById('messageInput');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
@@ -48,6 +47,7 @@ let wsPingInterval = null;
 
 const pianos = new Pianos();
 let metronome;
+let chat;
 const activeScreenShares = new Map();
 const pendingStreams = new Map();
 
@@ -65,11 +65,6 @@ function addLog(msg) {
     line.textContent += `${msg}`;
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
-}
-
-function addChatMessage(msg) {
-    chat.textContent += `${msg}\n`;
-    chat.scrollTop = chat.scrollHeight;
 }
 
 function parseServerUrl(url) {
@@ -729,6 +724,7 @@ function disconnect() {
     metronomeChannel = null;
     isFileSharingReady = false;
     disableFileSharing();
+    chat.disable();
     resetConnectionUI();
 }
 
@@ -772,13 +768,18 @@ function setupMidiChannel(channel) {
 }
 
 function setupChatChannel(channel) {
-    channel.onopen = () => addLog('Chat data channel opened.');
+    channel.onopen = () => {
+        addLog('Chat data channel opened.');
+        chat.enable();
+    };
     channel.onmessage = (event) => {
-        const message = event.data;
-        addChatMessage(`Peer: ${message}`);
+        chat.handleRemoteMessage(event.data);
     };
     channel.onerror = (err) => addLog(`Chat data channel error: ${err.message || err}`);
-    channel.onclose = () => addLog('Chat data channel closed.');
+    channel.onclose = () => {
+        addLog('Chat data channel closed.');
+        chat.disable();
+    };
 }
 
 function setupMetronomeChannel(channel) {
@@ -1152,12 +1153,6 @@ function setEventListeners() {
         populateDeviceOptions();
     };
 
-    const chatForm = document.querySelector('#chat-form');
-    chatForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        sendChatMessage();
-    });
-
     document.querySelector('#midiSelect').addEventListener('change', () => connectMidi());
     document.querySelector('#midiOutputSelect').addEventListener('change', () => saveSettings());
 
@@ -1299,6 +1294,17 @@ async function init() {
     disableFileSharing();
 
     setEventListeners();
+
+    chat = new Chat({
+        container: document.getElementById('chat-container'),
+        onSendMessage: (message) => {
+            if (chatChannel && chatChannel.readyState === 'open') {
+                chatChannel.send(message);
+            } else {
+                addLog('Chat message could not be sent: Data channel is not open.');
+            }
+        }
+    });
 
     pianos.createPiano({
         'selector': '#piano',

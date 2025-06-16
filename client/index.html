@@ -11,11 +11,10 @@
 </head>
 <body>
     <main>
-        <div id="additionalStreamsContainer"></div> <!-- NEU: Container für alle Floating Windows -->
+        <div id="additionalStreamsContainer"></div>
         <div id="metronomeContainer"></div>
         <section id="cams">
             <video id="remoteVideo" autoplay></video>
-            <!-- GEÄNDERT: Dieser Wrapper wird nun von camLocalDrag.js dynamisch durch ein Floating Window ersetzt -->
             <div id="localVideoWrapper" style="display: none;">
                 <video id="localVideo" autoplay muted></video>
                 <div id="resizeHandle"></div>
@@ -61,19 +60,21 @@
                     <p>Drop file here</p>
                 </div>
             </section>
-            <section id="chat">
+            <section id="chat-container" class="chat-module">
                 <div class="title">Chat</div>
-                <div id="chat-msgs" role="log" aria-live="polite"></div>
-                <form id="chat-form" aria-label="Chat-Nachrichten senden">
-                    <label for="messageInput">Message:</label>
-                    <input type="text" id="messageInput" placeholder="Input" required aria-required="true">
-                    <button type="submit">Send</button>
+                <div class="chat-messages" role="log" aria-live="polite"></div>
+                <form class="chat-form" aria-label="Chat-Nachrichten senden">
+                    <input type="text" class="chat-input" placeholder="Chat nicht verbunden" required aria-required="true" disabled>
+                    <button type="submit" class="chat-send-button" disabled title="Nachricht senden">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                        </svg>
+                    </button>
                 </form>
             </section>
             <section id="tools">
                  <div class="title">Tools</div>
                  <button id="toggleMetronome" disabled>Metronom</button>
-                 <!-- NEU: Button für Screen Sharing -->
                  <button id="shareScreenButton" disabled>Bildschirm teilen</button>
             </section>
             <section id="log">
@@ -83,7 +84,6 @@
         </section>
         <section id="piano"></section>
     </main>
-    <!-- NEU: Die neue Klasse muss vor app.js geladen werden -->
     <script src="js/floatingWindow.js" type="module"></script>
     <script src="js/app.js" type="module"></script>
 </body>
