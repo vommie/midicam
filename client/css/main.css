@@ -612,33 +612,26 @@ video:fullscreen {
     transition: none;
 }
 
-#sidebar-right [data-tooltip] {
-    position: relative;
-}
-
-#sidebar-right [data-tooltip]::after {
-    content: attr(data-tooltip);
+#sidebar-right .sidebar-custom-tooltip {
     position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-8px);
     background-color: #111;
     color: #eee;
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 0.8rem;
-    white-space: nowrap;
-    z-index: 1000;
+    white-space: normal;
+    word-wrap: break-word;
+    z-index: 1100;
+    pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    pointer-events: none;
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+    transition: opacity 0.2s ease-in-out;
+    max-width: 280px;
 }
 
-#sidebar-right [data-tooltip]:hover::after {
+#sidebar-right .sidebar-custom-tooltip.visible {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) translateY(-12px);
 }
 
 #sidebar-right #devices {

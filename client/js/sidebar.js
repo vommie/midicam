@@ -17,13 +17,17 @@ export class Sidebar {
         this.boundUpdateVolumeTooltip = this.updateVolumeTooltip.bind(this);
         this.boundHideVolumeTooltip = this.hideVolumeTooltip.bind(this);
 
+        this.tooltipEl = null;
+        this.boundShowTooltip = this.showTooltip.bind(this);
+        this.boundHideTooltip = this.hideTooltip.bind(this);
+
         this.init();
     }
 
     init() {
         this.initResizing();
         this.initCollapsibleSections();
-        this.initTooltips();
+        this.initDynamicTooltips();
         this.initVolumeTooltips();
         this.loadState();
         this.sidebar.style.visibility = 'visible';
@@ -71,14 +75,54 @@ export class Sidebar {
         });
     }
 
-    initTooltips() {
-        const tooltipElements = this.sidebar.querySelectorAll('[data-tooltip]');
-        tooltipElements.forEach(el => {
-            if (el.getAttribute('title')) {
-                el.setAttribute('data-tooltip', el.getAttribute('title'));
-                el.removeAttribute('title');
+    initDynamicTooltips() {
+        this.tooltipEl = document.createElement('div');
+        this.tooltipEl.className = 'sidebar-custom-tooltip';
+        this.sidebar.appendChild(this.tooltipEl);
+
+        const tooltipTriggers = this.sidebar.querySelectorAll('[data-tooltip]');
+        tooltipTriggers.forEach(trigger => {
+            if (trigger.getAttribute('title')) {
+                trigger.setAttribute('data-tooltip', trigger.getAttribute('title'));
+                trigger.removeAttribute('title');
             }
+            trigger.addEventListener('mouseenter', this.boundShowTooltip);
+            trigger.addEventListener('mouseleave', this.boundHideTooltip);
         });
+    }
+
+    showTooltip(e) {
+        const triggerEl = e.currentTarget;
+        const tooltipText = triggerEl.getAttribute('data-tooltip');
+        if (!tooltipText) return;
+
+        this.tooltipEl.textContent = tooltipText;
+        this.tooltipEl.classList.add('visible');
+
+        const triggerRect = triggerEl.getBoundingClientRect();
+        const sidebarRect = this.sidebar.getBoundingClientRect();
+        const tooltipRect = this.tooltipEl.getBoundingClientRect();
+
+        const top = triggerRect.top - sidebarRect.top - tooltipRect.height - 8;
+
+        let left = triggerRect.left - sidebarRect.left + (triggerRect.width / 2) - (tooltipRect.width / 2);
+
+        const sidebarPadding = 8;
+
+        if (left < sidebarPadding) {
+            left = sidebarPadding;
+        }
+
+        if (left + tooltipRect.width > sidebarRect.width - sidebarPadding) {
+            left = sidebarRect.width - tooltipRect.width - sidebarPadding;
+        }
+
+        this.tooltipEl.style.top = `${top}px`;
+        this.tooltipEl.style.left = `${left}px`;
+    }
+
+    hideTooltip() {
+        this.tooltipEl.classList.remove('visible');
     }
 
     initVolumeTooltips() {
