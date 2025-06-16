@@ -1147,6 +1147,11 @@ function stopScreenShare(streamId, isInitiator) {
 
 
 function setEventListeners() {
+    navigator.mediaDevices.ondevicechange = () => {
+        addLog('A media device change was detected. Refreshing device lists.');
+        populateDeviceOptions();
+    };
+
     const chatForm = document.querySelector('#chat-form');
     chatForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -1279,6 +1284,7 @@ function sendMidiMessage(midiData) {
 async function init() {
     await populateDeviceOptions();
     await populateMidiOptions();
+
     const mediaReady = await startMedia();
     if (!mediaReady) {
         addLog('Media setup failed. Please check camera/microphone permissions and availability.');
