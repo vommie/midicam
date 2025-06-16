@@ -53,7 +53,7 @@ class FloatingWindow {
 
         this.video = document.createElement('video');
         this.video.autoplay = true;
-        this.video.muted = true; // All local previews are muted
+        this.video.muted = true;
         if (this.options.stream) {
             this.video.srcObject = this.options.stream;
         }
@@ -70,7 +70,6 @@ class FloatingWindow {
 
     addEventListeners() {
         this.wrapper.addEventListener('mousedown', (e) => {
-            // Only start dragging if the mousedown is on the header
             if (e.target.classList.contains('floating-window-header')) {
                 this.isDragging = true;
                 this.wrapper.style.cursor = 'move';

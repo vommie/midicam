@@ -2,11 +2,10 @@ import { Pianos } from "./piano.js";
 import { Metronome } from "./metronome.js";
 import { CamLocalDrag } from "./camLocalDrag.js";
 import { MetronomeDrag } from "./metronomeDrag.js";
-import { FloatingWindow } from "./floatingWindow.js"; // NEU: Import der neuen Klasse
+import { FloatingWindow } from "./floatingWindow.js";
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
-const localVideoWrapper = document.getElementById('localVideoWrapper');
 const log = document.getElementById('log-msgs');
 const chat = document.getElementById('chat-msgs');
 const messageInput = document.getElementById('messageInput');
@@ -23,8 +22,8 @@ const serverUrlInput = document.getElementById('serverUrl');
 const startConnectionButton = document.getElementById('startConnection');
 const toggleMetronomeButton = document.getElementById('toggleMetronome');
 const metronomeContainer = document.getElementById('metronomeContainer');
-const shareScreenButton = document.getElementById('shareScreenButton'); // NEU: Screen Share Button
-const additionalStreamsContainer = document.getElementById('additionalStreamsContainer'); // NEU: Container für neue Fenster
+const shareScreenButton = document.getElementById('shareScreenButton');
+const additionalStreamsContainer = document.getElementById('additionalStreamsContainer');
 
 let pc;
 let midiChannel;
@@ -45,8 +44,8 @@ let ws;
 const CHUNK_SIZE = 65536;
 const pianos = new Pianos();
 let metronome;
-const activeScreenShares = new Map(); // NEU: Map zur Verwaltung der Screen Shares
-const pendingStreams = new Map(); // NEU: Map zur Zuordnung von ankommenden Streams
+const activeScreenShares = new Map();
+const pendingStreams = new Map();
 
 const VIDEO_QUALITY = {
     DEFAULT: { maxBitrate: 6000 * 1000 },
@@ -474,7 +473,12 @@ async function startConnection() {
     };
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
-        addLog(`Received WebSocket message: ${JSON.stringify(msg)}`);
+        if (msg.sdp) {
+             addLog(`Received WebSocket message: {type: "${msg.type}"}`);
+        } else {
+             addLog(`Received WebSocket message: ${JSON.stringify(msg)}`);
+        }
+
         if (msg.type === 'error') {
             addLog(`Server error: ${msg.message}`);
             resetConnectionUI();
@@ -485,7 +489,6 @@ async function startConnection() {
             disconnect();
             return;
         }
-        // NEU: Logik für neue Stream-Typen
         if (msg.type === 'new-stream') {
             addLog(`Peer is sharing a new stream: ${msg.streamName} (${msg.streamId})`);
             pendingStreams.set(msg.streamId, { name: msg.streamName });
@@ -524,7 +527,8 @@ async function startConnection() {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                     addLog('Queued ICE candidate added.');
                 }
-            } catch (err) {
+            } catch (err)
+{
                 addLog(`Error processing answer: ${err}`);
             }
         } else if (msg.type === 'candidate') {
@@ -538,6 +542,26 @@ async function startConnection() {
         }
     };
 
+    pc.onnegotiationneeded = async () => {
+        try {
+            if (pc.signalingState !== 'stable') {
+                addLog('Skipping negotiation, signaling state is not stable.');
+                return;
+            }
+            addLog('Negotiation needed, creating offer...');
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
+                addLog('Re-negotiation offer sent.');
+            }
+        } catch (err) {
+            addLog(`Error during negotiation: ${err}`);
+        }
+    };
+
+
     pc.onicecandidate = (event) => {
         if (event.candidate && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
@@ -545,33 +569,36 @@ async function startConnection() {
         }
     };
     pc.ontrack = (event) => {
-        // GEÄNDERT: Unterscheidung zwischen Haupt-Stream und zusätzlichen Streams
         const stream = event.streams[0];
-        const streamInfo = pendingStreams.get(stream.id);
+        if (!stream) {
+            addLog('Ontrack event received without a stream.');
+            return;
+        }
+
+        const streamId = stream.id;
+        const streamInfo = pendingStreams.get(streamId);
 
         if (streamInfo) {
-            // Dies ist ein bekannter Screen-Share-Stream
             addLog(`Received remote screen share stream: ${streamInfo.name}`);
             const remoteWindow = new FloatingWindow({
                 container: additionalStreamsContainer,
                 stream: stream,
                 title: `Peer: ${streamInfo.name}`,
                 isClosable: true,
-                id: stream.id
+                id: streamId
             });
-            // Beim Schließen des Remote-Fensters wird es nur lokal zerstört
             remoteWindow.wrapper.addEventListener('close', (e) => {
                  stopScreenShare(e.detail.id, false);
             });
-            activeScreenShares.set(stream.id, { window: remoteWindow });
-            pendingStreams.delete(stream.id);
-        } else {
-            // Dies ist der Haupt-Videostream
-            addLog('Remote stream received. Attaching to remoteVideo element.');
+            activeScreenShares.set(streamId, { window: remoteWindow, stream: stream });
+            pendingStreams.delete(streamId);
+        } else if (remoteVideo.srcObject?.id !== streamId) {
+            addLog('Remote main stream received. Attaching to remoteVideo element.');
             remoteVideo.srcObject = stream;
             remoteVideo.play().catch(err => addLog(`Error playing remote video stream: ${err}`));
         }
     };
+
     pc.oniceconnectionstatechange = () => {
         addLog(`ICE connection state change: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
@@ -579,7 +606,7 @@ async function startConnection() {
             enableFileSharing();
             connectMidi();
             toggleMetronomeButton.disabled = false;
-            shareScreenButton.disabled = false; // NEU: Screen-Share-Button aktivieren
+            shareScreenButton.disabled = false;
             startConnectionButton.disabled = false;
             startConnectionButton.style.backgroundColor = '#9D1919';
             startConnectionButton.style.color = '#ffffff';
@@ -591,7 +618,7 @@ async function startConnection() {
             isFileSharingReady = false;
             disableFileSharing();
             toggleMetronomeButton.disabled = true;
-            shareScreenButton.disabled = true; // NEU: Screen-Share-Button deaktivieren
+            shareScreenButton.disabled = true;
             remoteVideo.srcObject = null;
             addLog('Remote video reset due to ICE state change.');
             resetConnectionUI();
@@ -631,7 +658,6 @@ function disconnect() {
         ws.send(JSON.stringify({ type: 'disconnect-all' }));
         addLog('Disconnect-All message sent.');
     }
-    // NEU: Alle Screen-Shares beim Trennen beenden
     for (const streamId of activeScreenShares.keys()) {
         stopScreenShare(streamId, true);
     }
@@ -1136,10 +1162,9 @@ function setEventListeners() {
         }
     });
 
-    // NEU: Event listener für Screen Share Button
     shareScreenButton.addEventListener('click', startScreenShare);
 
-   toggleMetronomeButton.addEventListener('click', () => {
+    toggleMetronomeButton.addEventListener('click', () => {
         isMetronomeVisible = !isMetronomeVisible;
         metronomeContainer.classList.toggle('visible', isMetronomeVisible);
         toggleMetronomeButton.classList.toggle('active', isMetronomeVisible);
@@ -1183,8 +1208,6 @@ function setEventListeners() {
         }
     }
 
-    // WICHTIG: Die dblclick-Listener werden nun von der FloatingWindow-Klasse gehandhabt.
-    // localVideoWrapper.addEventListener('dblclick', () => toggleFullscreen(localVideo));
     remoteVideo.addEventListener('dblclick', () => toggleFullscreen(remoteVideo));
 
     function onFullscreenChange() {
@@ -1248,7 +1271,7 @@ async function init() {
     });
     metronome.insertInto(metronomeContainer);
 
-    new CamLocalDrag(); // GEÄNDERT: Nutzt intern die neue FloatingWindow Klasse
+    new CamLocalDrag();
     new MetronomeDrag();
     loadSettings();
 }

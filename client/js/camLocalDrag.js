@@ -6,7 +6,6 @@ class CamLocalDrag {
         this.localVideo = document.getElementById('localVideo');
         this.resizeHandle = document.getElementById('resizeHandle');
 
-        // Hide the original static elements
         this.localVideoWrapper.style.display = 'none';
 
         const savedPosition = JSON.parse(localStorage.getItem('localVideoPosition')) || { right: 20, top: 20 };
@@ -24,10 +23,8 @@ class CamLocalDrag {
             id: 'local-camera-window'
         });
 
-        // Update the original video element's stream when the floating window gets one
         this.localVideo.srcObject = this.floatingWindow.video.srcObject;
 
-        // Save position and size on changes
         this.floatingWindow.wrapper.addEventListener('mouseup', () => this.saveState());
         this.floatingWindow.wrapper.addEventListener('touchend', () => this.saveState());
     }
