@@ -1,4 +1,4 @@
-/* --- Global & Body Styles --- */
+/* Global */
 html, body {
     margin: 0;
     height: 100%;
@@ -14,7 +14,7 @@ body {
 }
 
 
-/* --- Main Layout --- */
+/* Main Layout */
 main > header {
     text-align: center;
     font-weight: bold;
@@ -25,7 +25,6 @@ main > header {
 
 main {
     display: grid;
-    /* Spaltenbreite wird durch sidebar.js gesteuert. Dies ist ein Fallback. */
     grid-template-areas: "c sr" "p p";
     grid-template-columns: 1fr 485px;
     grid-template-rows: 1fr auto;
@@ -34,8 +33,6 @@ main {
     overflow: hidden;
 }
 
-
-/* --- Video & Camera Styles --- */
 main video {
     border: none;
     background-color: #000;
@@ -68,7 +65,7 @@ video:fullscreen {
 }
 
 
-/* --- Floating Windows & Additional Streams --- */
+/* Floating Windows / Streams */
 #additionalStreamsContainer {
     position: absolute;
     top: 0;
@@ -148,11 +145,6 @@ video:fullscreen {
 
 .floating-window-resize-handle:hover {
     opacity: 1;
-}
-
-.throbber {
-    width: 30px;
-    height: auto;
 }
 
 /* Sidebar */
@@ -286,7 +278,7 @@ video:fullscreen {
     padding-top: 0;
     padding-bottom: 0;
     opacity: 0;
-    overflow: hidden; /* FIX: Added overflow: hidden to properly clip content */
+    overflow: hidden;
     pointer-events: none;
 }
 
@@ -392,13 +384,18 @@ video:fullscreen {
     background-color: #58c05c;
 }
 
+#sidebar-right #connection .throbber {
+    width: 30px;
+    height: auto;
+}
+
 #sidebar-right #tools .sidebar-section-content {
     flex-direction: row;
     flex-wrap: wrap;
 }
 
 #sidebar-right #tools button {
-    width: auto; /* FIX: Removed width: 100% to allow buttons to sit side-by-side */
+    width: auto;
     flex-grow: 1;
     background-color: #4a4a4a;
     color: #ddd;
@@ -486,7 +483,7 @@ video:fullscreen {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 6px; /* FIX: Explicit height to prevent oversized slider */
+    height: 6px;
     background: #444;
     border-radius: 3px;
     outline: none;
@@ -571,19 +568,20 @@ video:fullscreen {
     transform: translateX(-50%) translateY(-12px);
 }
 
-/* File Sharing Specifics */
-.dropzone-icon {
+/* File Sharing */
+
+#filesharing-container .dropzone-icon {
     width: 32px;
     height: 32px;
     opacity: 0.7;
-    flex-shrink: 0; /* FIX: Prevent icon from stretching */
+    flex-shrink: 0;
 }
 
-.filesharing-dropzone.dragover .dropzone-icon {
+#filesharing-container .filesharing-dropzone.dragover .dropzone-icon {
     opacity: 1;
 }
 
-.filesharing-dropzone {
+#filesharing-container .filesharing-dropzone {
     border: 2px dashed #555;
     border-radius: 8px;
     padding: 10px;
@@ -600,13 +598,13 @@ video:fullscreen {
     border-color: #777;
 }
 
-.filesharing-dropzone.dragover {
+#filesharing-container .filesharing-dropzone.dragover {
     background-color: #9D1919;
     border-color: #c13434;
     color: #fff;
 }
 
-.dropzone-content {
+#filesharing-container .dropzone-content {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -615,18 +613,18 @@ video:fullscreen {
     pointer-events: none;
 }
 
-.dropzone-text-main {
+#filesharing-container .dropzone-text-main {
     font-size: 0.9rem;
     font-weight: bold;
     margin: 0;
 }
 
-.dropzone-text-sub {
+#filesharing-container .dropzone-text-sub {
     font-size: 0.75rem;
     margin: 0;
 }
 
-.filesharing-list {
+#filesharing-container .filesharing-list {
     min-height: 80px;
     max-height: 200px;
     overflow-y: auto;
@@ -640,7 +638,7 @@ video:fullscreen {
     scrollbar-color: #666 #333;
 }
 
-.file-item {
+#filesharing-container .file-item {
     padding: 6px 8px;
     display: grid;
     grid-template-columns: 16px 20px 1fr auto;
@@ -652,30 +650,30 @@ video:fullscreen {
     overflow: hidden;
 }
 
-.file-item.sent {
+#filesharing-container .file-item.sent {
     background: rgba(76, 175, 80, 0.4);
 }
 
-.file-item.received {
+#filesharing-container .file-item.received {
     background: rgba(157, 25, 25, 0.4);
 }
 
-.file-item.failed {
+#filesharing-container .file-item.failed {
     background: rgba(100, 100, 100, 0.4);
     color: #aaa;
 }
 
-.file-item .direction {
+#filesharing-container .file-item .direction {
     font-weight: bold;
 }
 
-.file-item .icon {
+#filesharing-container .file-item .icon {
     width: 16px;
     height: auto;
     filter: invert(0.9);
 }
 
-.file-info {
+#filesharing-container .file-info {
     display: flex;
     flex-direction: column;
     white-space: nowrap;
@@ -683,25 +681,25 @@ video:fullscreen {
     text-overflow: ellipsis;
 }
 
-.file-name {
+#filesharing-container .file-name {
     font-size: 0.85rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.file-size {
+#filesharing-container .file-size {
     font-size: 0.7rem;
     opacity: 0.7;
 }
 
-.file-status {
+#filesharing-container .file-status {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.progress-container {
+#filesharing-container .progress-container {
     width: 80px;
     height: 6px;
     background: #555;
@@ -709,7 +707,7 @@ video:fullscreen {
     overflow: hidden;
 }
 
-.progress-bar {
+#filesharing-container .progress-bar {
     height: 100%;
     background: #4caf50;
     width: 0;
@@ -717,42 +715,42 @@ video:fullscreen {
     border-radius: 3px;
 }
 
-.file-item.failed .progress-bar {
+#filesharing-container .file-item.failed .progress-bar {
     background: #c13434;
 }
 
-.status-text {
+#filesharing-container .status-text {
     font-family: monospace;
     font-size: 0.7rem;
     width: 100px;
     text-align: right;
 }
 
-.file-item.failed .status-text {
+#filesharing-container .file-item.failed .status-text {
     font-family: sans-serif;
     text-align: left;
 }
 
-.file-action {
+#filesharing-container .file-action {
     color: #eee;
     text-decoration: none;
 }
 
-.file-action:hover {
+#filesharing-container .file-action:hover {
     color: #fff;
 }
 
-.file-action svg {
+#filesharing-container .file-action svg {
     width: 20px;
     height: 20px;
 }
 
-/* Chat Specifics */
-.chat-module.disabled {
+/* Chat */
+#chat-container .chat-module.disabled {
     opacity: 0.6;
 }
 
-.chat-messages {
+#chat-container .chat-messages {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -777,7 +775,7 @@ video:fullscreen {
     }
 }
 
-.chat-bubble {
+#chat-container .chat-bubble {
     max-width: 80%;
     padding: 8px 12px;
     border-radius: 18px;
@@ -785,21 +783,21 @@ video:fullscreen {
     animation: bubble-in 0.3s ease-out forwards;
 }
 
-.chat-bubble.local {
+#chat-container .chat-bubble.local {
     background-color: #4CAF50;
     color: white;
     align-self: flex-start;
     border-bottom-left-radius: 4px;
 }
 
-.chat-bubble.remote {
+#chat-container .chat-bubble.remote {
     background-color: #9D1919;
     color: white;
     align-self: flex-end;
     border-bottom-right-radius: 4px;
 }
 
-.chat-bubble .sender-name {
+#chat-container .chat-bubble .sender-name {
     font-size: 0.75rem;
     font-weight: bold;
     display: block;
@@ -807,18 +805,18 @@ video:fullscreen {
     opacity: 0.8;
 }
 
-.chat-bubble .message-text {
+#chat-container .chat-bubble .message-text {
     font-size: 0.9rem;
     line-height: 1.3;
     margin: 0;
 }
 
-.chat-form {
+#chat-container .chat-form {
     display: flex;
     gap: 5px;
 }
 
-.chat-input {
+#chat-container .chat-input {
     flex-grow: 1;
     padding: 8px;
     background-color: #333;
@@ -828,17 +826,17 @@ video:fullscreen {
     transition: border-color 0.2s, background-color 0.2s;
 }
 
-.chat-input:focus {
+#chat-container .chat-input:focus {
     outline: none;
     border-color: #4CAF50;
 }
 
-.chat-input:disabled {
+#chat-container .chat-input:disabled {
     background-color: #252525;
     cursor: not-allowed;
 }
 
-.chat-send-button {
+#chat-container .chat-send-button {
     flex-shrink: 0;
     width: 38px;
     height: 38px;
@@ -854,22 +852,17 @@ video:fullscreen {
     transition: background-color 0.2s;
 }
 
-.chat-send-button:hover:not(:disabled) {
+#chat-container .chat-send-button:hover:not(:disabled) {
     background-color: #45a049;
 }
 
-.chat-send-button:disabled {
+#chat-container .chat-send-button:disabled {
     background-color: #555;
     color: #888;
     cursor: not-allowed;
 }
 
-/******************************************************/
-/*           END: CORRECTED SIDEBAR STYLES            */
-/******************************************************/
-
-
-/* --- Log Modal Styles (unchanged) --- */
+/* Log Modal */
 .log-modal-overlay {
     position: fixed;
     top: 0;
@@ -986,7 +979,6 @@ video:fullscreen {
     background-color: #555;
 }
 
-
 .log-container {
     flex-grow: 1;
     overflow-y: auto;
@@ -1027,6 +1019,7 @@ video:fullscreen {
 .log-entry.info {
     background-color: rgba(80, 80, 80, 0.3);
 }
+
 .log-entry.info .level {
     color: #87ceeb; /* SkyBlue */
 }
@@ -1035,6 +1028,7 @@ video:fullscreen {
     background-color: rgba(60, 60, 60, 0.3);
     color: #bbb;
 }
+
 .log-entry.debug .level {
     color: #aaa;
 }
@@ -1042,6 +1036,7 @@ video:fullscreen {
 .log-entry.error {
     background-color: rgba(200, 50, 50, 0.3);
 }
+
 .log-entry.error .level {
     color: #ff6b6b; /* Light Red */
 }
