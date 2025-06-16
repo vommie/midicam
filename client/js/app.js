@@ -42,6 +42,9 @@ let lastMicVolume = 1;
 let lastRemoteVolume = 1;
 let ws;
 const CHUNK_SIZE = 65536;
+const MIDI_BUFFER_THRESHOLD = 1024;
+let iceReconnectTimer = null;
+
 const pianos = new Pianos();
 let metronome;
 const activeScreenShares = new Map();
@@ -348,10 +351,14 @@ async function connectMidi() {
             if (selectedInput) {
                 selectedInput.onmidimessage = (message) => {
                     const midiData = new Uint8Array(message.data);
-                    addLog(`Local MIDI message sent: [${midiData}]`);
                     pianos.getMIDIMessage(message, 'local');
                     if (midiChannel && midiChannel.readyState === 'open') {
-                        midiChannel.send(midiData.buffer);
+                        if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
+                            midiChannel.send(midiData.buffer);
+                            addLog(`Local MIDI message sent: [${midiData}]`);
+                        } else {
+                            addLog(`MIDI message dropped due to high buffer: ${midiChannel.bufferedAmount} bytes.`);
+                        }
                     } else {
                         addLog('MIDI data channel is not open.');
                     }
@@ -484,7 +491,7 @@ async function startConnection() {
             resetConnectionUI();
             return;
         }
-        if (msg.type === 'disconnected-by-peer') {
+        if (msg.type === 'disconnected-by-peer' || msg.type === 'peer-disconnected') {
             addLog('Connection closed by peer.');
             disconnect();
             return;
@@ -601,27 +608,41 @@ async function startConnection() {
 
     pc.oniceconnectionstatechange = () => {
         addLog(`ICE connection state change: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-            isFileSharingReady = true;
-            enableFileSharing();
-            connectMidi();
-            toggleMetronomeButton.disabled = false;
-            shareScreenButton.disabled = false;
-            startConnectionButton.disabled = false;
-            startConnectionButton.style.backgroundColor = '#9D1919';
-            startConnectionButton.style.color = '#ffffff';
-            startConnectionButton.innerHTML = 'Disconnect';
-            serverUrlInput.style.display = 'none';
-            document.querySelector('label[for="serverUrl"]').style.display = 'none';
-            updateVideoEncodingParameters(false);
-        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
-            isFileSharingReady = false;
-            disableFileSharing();
-            toggleMetronomeButton.disabled = true;
-            shareScreenButton.disabled = true;
-            remoteVideo.srcObject = null;
-            addLog('Remote video reset due to ICE state change.');
-            resetConnectionUI();
+        if (iceReconnectTimer) {
+            clearTimeout(iceReconnectTimer);
+            iceReconnectTimer = null;
+        }
+
+        switch (pc.iceConnectionState) {
+            case 'connected':
+            case 'completed':
+                isFileSharingReady = true;
+                enableFileSharing();
+                connectMidi();
+                toggleMetronomeButton.disabled = false;
+                shareScreenButton.disabled = false;
+                startConnectionButton.disabled = false;
+                startConnectionButton.style.backgroundColor = '#9D1919';
+                startConnectionButton.style.color = '#ffffff';
+                startConnectionButton.innerHTML = 'Disconnect';
+                serverUrlInput.style.display = 'none';
+                document.querySelector('label[for="serverUrl"]').style.display = 'none';
+                updateVideoEncodingParameters(false);
+                break;
+            case 'disconnected':
+                addLog('Connection lost. Attempting to reconnect for 5 seconds...');
+                iceReconnectTimer = setTimeout(() => {
+                    if (pc && (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed')) {
+                        addLog('Reconnect failed. Closing connection.');
+                        disconnect();
+                    }
+                }, 5000);
+                break;
+            case 'failed':
+            case 'closed':
+                addLog('Connection failed or closed. Resetting.');
+                disconnect();
+                break;
         }
     };
 
@@ -703,7 +724,7 @@ function resetConnectionUI() {
     document.querySelector('label[for="serverUrl"]').style.display = 'block';
 
     toggleMetronomeButton.disabled = true;
-    shareScreenButton.disabled = true; // NEU: Deaktivieren
+    shareScreenButton.disabled = true;
     toggleMetronomeButton.classList.remove('active');
     metronomeContainer.classList.remove('visible', 'master', 'slave');
     isMetronomeVisible = false;
@@ -1227,8 +1248,12 @@ function setEventListeners() {
 
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
-        midiChannel.send(midiData.buffer);
-        addLog(`MIDI message from piano sent: [${midiData}]`);
+        if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
+            midiChannel.send(midiData.buffer);
+            addLog(`MIDI message from piano sent: [${midiData}]`);
+        } else {
+            addLog(`MIDI message from piano dropped due to high buffer: ${midiChannel.bufferedAmount} bytes.`);
+        }
     } else {
         addLog('Cannot send MIDI message: data channel is not open.');
     }
