@@ -6,15 +6,14 @@ class FloatingWindow {
             title: 'Stream',
             isClosable: true,
             initialWidth: 300,
-            initialHeight: 200, // This will be corrected by aspect ratio later
+            initialHeight: 200,
             initialRight: 20,
             initialTop: 20,
             id: `window-${Date.now()}`,
             ...options
         };
 
-        // --- GEÄNDERT: Konstante für die Höhe der Titelleiste für präzise Berechnungen ---
-        this.HEADER_HEIGHT = 24; // Corresponds to grid-template-rows in CSS
+        this.HEADER_HEIGHT = 24;
 
         this.isDragging = false;
         this.isResizing = false;
@@ -24,14 +23,12 @@ class FloatingWindow {
         this.startHeight = 0;
         this.startRight = 0;
         this.minVisiblePx = 20;
-        // --- GEÄNDERT: Eigenschaft zum Speichern des Seitenverhältnisses ---
-        this.aspectRatio = 16 / 9; // Default aspect ratio
+        this.aspectRatio = 16 / 9;
 
         this.createElement();
         this.addEventListeners();
 
-        // --- GEÄNDERT: Größe nach dem Erstellen anpassen, falls Stream bereits vorhanden ist ---
-        if (this.video.readyState >= 1) { // METADATA or more is loaded
+        if (this.video.readyState >= 1) {
             this.updateSizeForAspectRatio();
         }
 
@@ -43,7 +40,6 @@ class FloatingWindow {
         this.wrapper.className = 'floating-window-wrapper';
         this.wrapper.id = this.options.id;
         this.wrapper.style.width = this.options.initialWidth + 'px';
-        // Height will be set dynamically by updateSizeForAspectRatio
         this.wrapper.style.right = this.options.initialRight + 'px';
         this.wrapper.style.top = this.options.initialTop + 'px';
         this.wrapper.setAttribute('tabindex', '0');
@@ -79,20 +75,15 @@ class FloatingWindow {
         this.options.container.appendChild(this.wrapper);
     }
 
-    // --- NEU: Eine zentrale Funktion zur Anpassung der Fenstergröße an das Seitenverhältnis ---
     updateSizeForAspectRatio() {
         if (!this.video.videoWidth || !this.video.videoHeight) {
-            // Metadaten noch nicht verfügbar, Funktion wird später erneut aufgerufen.
             return;
         }
 
-        // Aktualisiere das Seitenverhältnis basierend auf den Videodaten
         this.aspectRatio = this.video.videoWidth / this.video.videoHeight;
 
         const currentWidth = this.wrapper.offsetWidth;
-        // Berechne die Höhe nur für den Videobereich
         const videoHeight = currentWidth / this.aspectRatio;
-        // Die Gesamthöhe des Fensters ist Videohöhe + Höhe der Titelleiste
         const totalHeight = videoHeight + this.HEADER_HEIGHT;
 
         this.wrapper.style.height = totalHeight + 'px';
@@ -131,8 +122,6 @@ class FloatingWindow {
 
         this.video.addEventListener('dblclick', () => this.toggleFullscreen());
 
-        // --- GEÄNDERT: Event-Listener, um auf Videometadaten zu reagieren ---
-        // Dieser wird ausgelöst, wenn die Videogröße bekannt ist oder sich ändert.
         this.video.addEventListener('loadedmetadata', () => {
             this.updateSizeForAspectRatio();
         });
@@ -147,21 +136,17 @@ class FloatingWindow {
             this.setPosition(newRight, newTop);
         }
 
-        // --- GEÄNDERT: Die Logik verwendet nun die zentrale Funktion zur Größenanpassung ---
         if (this.isResizing) {
             const widthChange = e.clientX - this.startX;
             const newWidth = this.startWidth + widthChange;
 
             const boundedWidth = Math.max(150, newWidth);
 
-            // Setze nur die neue Breite
             this.wrapper.style.width = boundedWidth + 'px';
 
-            // Passe die 'right'-Position an, damit die linke obere Ecke fixiert bleibt
             const newRight = this.startRight - (boundedWidth - this.startWidth);
             this.wrapper.style.right = newRight + 'px';
 
-            // Lasse die zentrale Funktion die korrekte Höhe berechnen und setzen
             this.updateSizeForAspectRatio();
         }
     }
