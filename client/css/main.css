@@ -620,18 +620,10 @@ video:fullscreen {
     transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
-#sidebar-right [data-tooltip]:not(#micVolume):not(#remoteVolume):hover::after {
+#sidebar-right [data-tooltip]:hover::after {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(-12px);
-}
-
-#sidebar-right [data-tooltip].is-active-tooltip::after {
-    opacity: 1;
-    visibility: visible;
-    left: var(--tooltip-left, 50%);
-    transform: translateX(-50%) translateY(-12px);
-    transition: none;
 }
 
 #sidebar-right #devices {

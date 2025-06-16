@@ -962,80 +962,49 @@ function setEventListeners() {
     document.querySelector('#videoSelect').addEventListener('change', () => switchMedia());
     document.querySelector('#audioSelect').addEventListener('change', () => switchMedia());
 
-    [micVolume, remoteVolume].forEach(slider => {
-        let originalTooltip = '';
-
-        const updateTooltip = (el) => {
-            const percentage = Math.round(parseFloat(el.value) * 100);
-            el.dataset.tooltip = `${percentage}%`;
-            const min = parseFloat(el.min) || 0;
-            const max = parseFloat(el.max) || 1;
-            const val = parseFloat(el.value);
-            const sliderWidth = el.offsetWidth;
-            const thumbWidth = 18;
-            const percent = (val - min) / (max - min);
-            const thumbPosition = percent * (sliderWidth - thumbWidth) + (thumbWidth / 2);
-            el.style.setProperty('--tooltip-left', `${thumbPosition}px`);
-        };
-
-        slider.addEventListener('mousedown', (e) => {
-            const targetSlider = e.target;
-            originalTooltip = targetSlider.dataset.tooltip || '';
-            targetSlider.classList.add('is-active-tooltip');
-            updateTooltip(targetSlider);
-        });
-
-        slider.addEventListener('input', (e) => {
-            const targetSlider = e.target;
-            updateTooltip(targetSlider);
-
-            if (targetSlider.id === 'micVolume') {
-                adjustMicVolume();
-                lastMicVolume = targetSlider.value;
-                micVolumeIcon.classList.toggle('muted', parseFloat(targetSlider.value) === 0);
-            } else {
-                adjustRemoteVolume();
-                lastRemoteVolume = targetSlider.value;
-                remoteVolumeIcon.classList.toggle('muted', parseFloat(targetSlider.value) === 0);
-            }
-            targetSlider.style.setProperty('--p', `${targetSlider.value * 100}%`);
-        });
-
-        const endDrag = (e) => {
-            if (slider.classList.contains('is-active-tooltip')) {
-                slider.classList.remove('is-active-tooltip');
-                slider.dataset.tooltip = originalTooltip;
-                 slider.style.removeProperty('--tooltip-left');
-                saveSettings();
-            }
-        };
-
-        window.addEventListener('mouseup', endDrag);
-        window.addEventListener('touchend', endDrag);
+    micVolume.addEventListener('input', () => {
+        adjustMicVolume();
+        saveSettings();
+        lastMicVolume = micVolume.value;
+        const isMuted = parseFloat(micVolume.value) === 0;
+        micVolumeIcon.classList.toggle('muted', isMuted);
+        micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
+    });
+    remoteVolume.addEventListener('input', () => {
+        adjustRemoteVolume();
+        saveSettings();
+        lastRemoteVolume = remoteVolume.value;
+        const isMuted = parseFloat(remoteVolume.value) === 0;
+        remoteVolumeIcon.classList.toggle('muted', isMuted);
+        remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
 
-    // Mute Buttons Logic
     micVolumeIcon.addEventListener('click', () => {
         if (parseFloat(micVolume.value) > 0) {
             lastMicVolume = micVolume.value;
             micVolume.value = 0;
+            micVolumeIcon.classList.add('muted');
         } else {
             micVolume.value = lastMicVolume;
+            micVolumeIcon.classList.remove('muted');
         }
         adjustMicVolume();
-        micVolume.dispatchEvent(new Event('input', { bubbles:true }));
+        micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
 
     remoteVolumeIcon.addEventListener('click', () => {
         if (parseFloat(remoteVolume.value) > 0) {
             lastRemoteVolume = remoteVolume.value;
             remoteVolume.value = 0;
+            remoteVolumeIcon.classList.add('muted');
         } else {
             remoteVolume.value = lastRemoteVolume;
+            remoteVolumeIcon.classList.remove('muted');
         }
         adjustRemoteVolume();
-        remoteVolume.dispatchEvent(new Event('input', { bubbles:true }));
+        remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
+
 
     startConnectionButton.addEventListener('click', () => {
         if (startConnectionButton.innerHTML.includes('Disconnect')) {
