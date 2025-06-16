@@ -92,14 +92,19 @@ class FloatingWindow {
 
     addEventListeners() {
         this.wrapper.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('floating-window-header')) {
-                this.isDragging = true;
-                this.wrapper.style.cursor = 'move';
-                const rect = this.wrapper.getBoundingClientRect();
-                this.startX = (window.innerWidth - e.clientX) - parseInt(this.wrapper.style.right);
-                this.startY = e.clientY - rect.top;
-                e.preventDefault();
+            const onResizeHandle = e.target.closest('.floating-window-resize-handle');
+            const onCloseButton = e.target.closest('.floating-window-close');
+
+            if (onResizeHandle || onCloseButton) {
+                return;
             }
+
+            this.isDragging = true;
+            this.wrapper.style.cursor = 'move';
+            const rect = this.wrapper.getBoundingClientRect();
+            this.startX = (window.innerWidth - e.clientX) - parseInt(this.wrapper.style.right);
+            this.startY = e.clientY - rect.top;
+            e.preventDefault();
         });
 
         this.resizeHandle.addEventListener('mousedown', (e) => {
