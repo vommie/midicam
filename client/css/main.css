@@ -144,13 +144,18 @@ video:fullscreen {
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 15px;
-    height: 15px;
-    background: #ccc;
+    width: 16px;
+    height: 16px;
     cursor: se-resize;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    opacity: 0.6;
+    transition: opacity 0.2s ease-in-out;
+    background-image:
+        linear-gradient(135deg, transparent 4px, #ccc 4px, #ccc 6px, transparent 6px),
+        linear-gradient(135deg, transparent 9px, #ccc 9px, #ccc 11px, transparent 11px);
+    background-repeat: no-repeat;
+    background-position: bottom right;
 }
+
 .floating-window-resize-handle:hover {
     opacity: 1;
 }
