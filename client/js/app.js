@@ -425,7 +425,7 @@ async function startConnection() {
 
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
-    startConnectionButton.innerHTML = 'Connecting <img src="assets/throbber.gif" alt="Waiting" class="throbber">';
+    startConnectionButton.innerHTML = '<img src="assets/throbber.gif" alt="Waiting" class="throbber">';
     serverUrlInput.disabled = true;
 
     pc = new RTCPeerConnection({
@@ -620,8 +620,7 @@ async function startConnection() {
                 startConnectionButton.style.backgroundColor = '#9D1919';
                 startConnectionButton.style.color = '#ffffff';
                 startConnectionButton.innerHTML = 'Disconnect';
-                serverUrlInput.style.display = 'none';
-                document.querySelector('label[for="serverUrl"]').style.display = 'none';
+                serverUrlInput.disabled = true;
                 updateVideoEncodingParameters(false);
                 break;
             case 'disconnected':
@@ -721,8 +720,6 @@ function resetConnectionUI() {
     startConnectionButton.style.backgroundColor = '#4CAF50';
     startConnectionButton.innerHTML = 'Start';
     serverUrlInput.disabled = false;
-    serverUrlInput.style.display = 'block';
-    document.querySelector('label[for="serverUrl"]').style.display = 'block';
 
     toggleMetronomeButton.disabled = true;
     shareScreenButton.disabled = true;

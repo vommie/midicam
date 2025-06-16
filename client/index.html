@@ -32,9 +32,11 @@
                 <div class="sidebar-section-content">
                     <div class="form-group">
                         <label for="serverUrl">Server URL</label>
-                        <input type="text" id="serverUrl" placeholder="e.g., http://localhost:8080" data-tooltip="Enter the server URL to connect to. Format: http(s)://address:port">
+                        <div class="connection-row">
+                            <input type="text" id="serverUrl" placeholder="e.g., http://localhost:8080" data-tooltip="Enter the server URL...">
+                            <button id="startConnection" data-tooltip="Connect to or disconnect from the server">Start</button>
+                        </div>
                     </div>
-                    <button id="startConnection" data-tooltip="Connect to or disconnect from the server">Start</button>
                 </div>
             </section>
 
