@@ -207,7 +207,28 @@ video:fullscreen {
 }
 
 #sidebar-right #sidebar-resize-handle:hover {
-    background-color: rgba(40, 157, 25, 0.8)
+    background-color: rgba(40, 157, 25, 0.8);
+    transition: background-color 0.2s;
+}
+
+#sidebar-right #sidebar-resize-handle.is-dragging {
+    transition: none;
+    animation: sidebar-handle-pulse-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes sidebar-handle-pulse-glow {
+    0% {
+        background-color: rgba(40, 157, 25, 0.7);
+        box-shadow: 0 0 4px rgba(40, 157, 25, 0.5);
+    }
+    50% {
+        background-color: rgba(60, 200, 45, 0.9);
+        box-shadow: 0 0 16px rgba(60, 200, 45, 0.8);
+    }
+    100% {
+        background-color: rgba(40, 157, 25, 0.7);
+        box-shadow: 0 0 4px rgba(40, 157, 25, 0.5);
+    }
 }
 
 #sidebar-right .sidebar-section {

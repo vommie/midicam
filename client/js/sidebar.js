@@ -9,9 +9,6 @@ export class Sidebar {
 
         this.minWidth = 320;
         this.defaultWidth = 485;
-
-        // Binden der Funktionen an 'this' und Speichern der Referenz
-        // Dies ist der entscheidende Fix für den Resize-Bug.
         this.boundResize = this.resize.bind(this);
         this.boundStopResize = this.stopResize.bind(this);
 
@@ -22,14 +19,14 @@ export class Sidebar {
         this.initResizing();
         this.initCollapsibleSections();
         this.initTooltips();
-        this.loadState(); // Lade den Zustand NACH dem Initialisieren, um alles korrekt anzuwenden
+        this.loadState();
         this.sidebar.style.visibility = 'visible';
     }
 
     initResizing() {
         this.resizeHandle.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            // Verwende die gespeicherten, gebundenen Funktionen
+            this.resizeHandle.classList.add('is-dragging');
             document.addEventListener('mousemove', this.boundResize);
             document.addEventListener('mouseup', this.boundStopResize);
             document.body.style.cursor = 'col-resize';
@@ -48,9 +45,9 @@ export class Sidebar {
     }
 
     stopResize() {
-        // Verwende die gespeicherten, gebundenen Funktionen zum Entfernen
         document.removeEventListener('mousemove', this.boundResize);
         document.removeEventListener('mouseup', this.boundStopResize);
+        this.resizeHandle.classList.remove('is-dragging');
         document.body.style.cursor = 'default';
         document.body.style.userSelect = 'auto';
         this.saveState();
@@ -69,7 +66,6 @@ export class Sidebar {
     }
 
     initTooltips() {
-        // Diese Funktion bleibt unverändert, ist aber weiterhin wichtig.
         const tooltipElements = this.sidebar.querySelectorAll('[data-tooltip]');
         tooltipElements.forEach(el => {
             if (el.getAttribute('title')) {
