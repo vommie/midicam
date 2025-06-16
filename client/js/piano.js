@@ -6,6 +6,11 @@ class Pianos {
         this.midiEnabled = false;
         this.pianos = [];
         this.keys = this.createKeys();
+        this.logger = {
+            info: () => {},
+            debug: () => {},
+            error: console.error
+        };
     }
 
     _getStorageKey(id) {
@@ -23,9 +28,9 @@ class Pianos {
         };
         try {
             localStorage.setItem(this._getStorageKey(id), JSON.stringify(settingsToSave));
-            console.log(`Piano ${id} settings saved to localStorage.`);
+            this.logger.info(`Piano ${id} settings saved to localStorage.`);
         } catch (e) {
-            console.error(`Failed to save piano ${id} settings:`, e);
+            this.logger.error(`Failed to save piano ${id} settings:`, e);
         }
     }
 
@@ -33,11 +38,11 @@ class Pianos {
         try {
             const savedSettings = localStorage.getItem(this._getStorageKey(id));
             if (savedSettings) {
-                console.log(`Piano ${id} settings loaded from localStorage.`);
+                this.logger.info(`Piano ${id} settings loaded from localStorage.`);
                 return JSON.parse(savedSettings);
             }
         } catch (e) {
-            console.error(`Failed to load or parse piano ${id} settings:`, e);
+            this.logger.error(`Failed to load or parse piano ${id} settings:`, e);
         }
         return {};
     }
@@ -50,13 +55,13 @@ class Pianos {
         });
     }
 
-    onMIDIFailure() {
-        console.log('Error: No midi device acccess!');
+    onMIDIFailure = () => {
+        this.logger.error('No midi device acccess!');
         this.midiEnabled = false;
     }
 
     onMIDISuccess = (midiAccess) => {
-        console.log('Midi access available.');
+        this.logger.info('Midi access available.');
         this.midiEnabled = true;
         for(let input of midiAccess.inputs.values()) {
             input.onmidimessage = this.getMIDIMessage;
@@ -94,47 +99,48 @@ class Pianos {
     }
 
     noteOn = (note, velocity, src = 'local') => {
-        console.log('Note On: ', note, ', Velocity: ', velocity);
+        this.logger.debug(`Note On: ${note}, Velocity: ${velocity}, Source: ${src}`);
         this.pianos.forEach(piano => {
             piano.handleNoteOn(note, velocity, src);
         });
     }
 
     noteOff = (note) => {
-        console.log('Note Off: ', note);
+        this.logger.debug(`Note Off: ${note}`);
         this.pianos.forEach(piano => {
             piano.handleNoteOff(note);
         });
     }
 
     sustainPedal(velocity, src) {
-        console.log('Sustain Pedal: ', velocity, 'from', src);
+        this.logger.debug(`Sustain Pedal: ${velocity} from ${src}`);
         this.pianos.forEach(piano=>{
             piano.sustainPedal(velocity, src);
         });
     }
 
     sostenutoPedal(state, src) {
-        console.log('Sostenuto Pedal: ', state, 'from', src);
+        this.logger.debug(`Sostenuto Pedal: ${state} from ${src}`);
         this.pianos.forEach(piano=>{
             piano.sostenutoPedal(state, src);
         });
     }
 
     softPedal(state, src) {
-        console.log('Soft Pedal: ', state, 'from', src);
+        this.logger.debug(`Soft Pedal: ${state} from ${src}`);
         this.pianos.forEach(piano=>{
             piano.softPedal(state, src);
         });
     }
 
-    // MODIFIZIERT: Lädt Einstellungen, bevor das Klavier erstellt wird
     createPiano(opts = {}) {
+        if (opts.logger) {
+            this.logger = opts.logger;
+        }
+
         const pianoId = this.pianos.length;
         const loadedOpts = this.loadPianoSettings(pianoId);
 
-        // Standard-Optionen mit geladenen Optionen zusammenführen
-        // Geladene Optionen überschreiben die Standardwerte
         const finalOpts = { ...opts, ...loadedOpts };
 
         if(finalOpts.fromKey == undefined) finalOpts.fromKey = 1;
@@ -154,14 +160,14 @@ class Pianos {
         this.pianos.push(piano);
     }
 
-    // MODIFIZIERT: Speichert die Einstellungen, wenn das Klavier neu erstellt wird
     recreatePiano(id, newOpts) {
         const oldPiano = this.pianos[id];
         if (!oldPiano) return;
 
+        this.logger.info(`Recreating piano ${id} with new settings.`);
+
         const finalOpts = { ...oldPiano.opts, ...newOpts };
 
-        // HIER werden die Einstellungen gespeichert, da dies bei jeder Änderung aufgerufen wird
         this.savePianoSettings(id, finalOpts);
 
         const container = document.querySelector(oldPiano.opts.selector);
@@ -178,16 +184,16 @@ class Pianos {
     validateOptRGBArray(array) {
         if(array == undefined) return false;
         if(!Array.isArray(array)) {
-            console.log('The RGB option is not an array.');
+            this.logger.error('The RGB option is not an array.');
             return false;
         }
         if(array.length !== 3) {
-            console.log('The RGB option does not contain exactly three elements.');
+            this.logger.error('The RGB option does not contain exactly three elements.');
             return false;
         }
         for(let i = 0; i < array.length; i++) {
             if (typeof array[i] !== 'number' || !Number.isInteger(array[i]) || array[i] < 0 || array[i] > 255) {
-                console.log('An entry of the RGB option array is not an integer between 0 and 255.');
+                this.logger.error('An entry of the RGB option array is not an integer between 0 and 255.');
                 return false;
             }
         }
@@ -232,15 +238,22 @@ class Piano {
         this.keys = keys;
         this.opts = opts;
         this.manager = manager;
+        this.logger = opts.logger || {
+            info: () => {},
+            debug: () => {},
+            error: console.error
+        };
         this.boxShadows = {};
         this.scaleFactor = 1;
         this.sustainedKeyIds = [];
         this.pressedKeys = [];
         this.soundPlayer = new SoundPlayer();
         if(opts.undampedStrings.length > 1) this.opts.undampedStrings = this.getUndampedStringsRangeNotes(opts.undampedStrings[0], opts.undampedStrings[1]);
-        console.log('creating new Piano ...')
+
+        this.logger.info(`Creating new Piano (ID: ${this.id})`);
+        this.logger.debug(`Piano ${this.id} created with options: ${JSON.stringify(this.opts)}`);
+
         this.templates = this.getTemplates();
-        console.log(`piano ID: ${this.id}`);
         this.elements = {};
         this.elements.piano = this.insertPiano();
         this.elements.keys = [];
@@ -299,14 +312,14 @@ class Piano {
                 let hookElement = document.querySelector(this.opts.selector);
                 if(hookElement) {
                     hookElement.appendChild(piano);
-                    console.log(`Inserted piano to element with selector "${this.opts.selector}"`);
+                    this.logger.info(`Inserted piano to element with selector "${this.opts.selector}"`);
                 }
                 else throw `Cannot find element for given piano selector "${this.opts.selector}"`;
             }
             else document.body.appendChild(piano);;
         }
         catch(err) {
-            console.error(err);
+            this.logger.error(err);
         }
         return {
             container: piano,
@@ -319,7 +332,7 @@ class Piano {
     insertKeys() {
         const fromKey = this.opts.fromKey;
         const toKey = this.opts.toKey;
-        console.log(`piano ${this.id}: rendering all 88 keys, active range from ${fromKey} to ${toKey}`);
+        this.logger.info(`Piano ${this.id}: rendering all 88 keys, active range from ${fromKey} to ${toKey}`);
         for (let i = 1; i <= 88; i++) {
             if (this.keys[i] == undefined) return;
             this.insertKey(i, i === 1, i === 88);
@@ -583,7 +596,7 @@ class Piano {
         if (!this.isKeyInRange(id)) return;
 
         this.lastKeyId = id;
-        console.log(`piano ${this.id}: key ${id} pressed: ${this.getKeyName(id, true)}`);
+        this.logger.debug(`Piano ${this.id}: key ${id} pressed: ${this.getKeyName(id, true)}`);
         this.addKeyPressedStyle(this.elements.keys[id]);
         this.playNote(id);
         this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
@@ -594,7 +607,7 @@ class Piano {
         let id = e.currentTarget.dataset.id;
         if (!this.isKeyInRange(id)) return;
 
-        console.log(`piano ${this.id}: key ${id} released: ${this.getKeyName(id, true)}`);
+        this.logger.debug(`Piano ${this.id}: key ${id} released: ${this.getKeyName(id, true)}`);
         this.removeKeyPressedStyle(this.elements.keys[id]);
         this.stopNote(id);
         this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
@@ -606,7 +619,7 @@ class Piano {
         if (!this.isKeyInRange(id)) return;
         if (id == this.lastKeyId) return;
 
-        console.log(`piano ${this.id}: gliss from key ${this.lastKeyId} (${this.getKeyName(this.lastKeyId, true)}) to ${id} (${this.getKeyName(id, true)})`);
+        this.logger.debug(`Piano ${this.id}: gliss from key ${this.lastKeyId} to ${id}`);
         this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
         this.stopNote(this.lastKeyId);
         this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
@@ -653,7 +666,7 @@ class Piano {
         let keyWhiteWidth = pianoRect.width/this.elements.piano.barWhite.childElementCount;
         let factor = keyWhiteWidth/20;
         this.scaleFactor = factor;
-        console.log(`piano ${this.id}: scaling factor ${factor}`);
+        this.logger.debug(`Piano ${this.id}: scaling factor updated to ${factor}`);
         let keyBlackWidth = keyWhiteWidth/4;
         this.elements.piano.container.style.maxWidth = `${pianoRect.width}px`;
         this.elements.piano.barWhite.style.gridAutoColumns = `${keyWhiteWidth}px`;

@@ -32,15 +32,15 @@
             <section id="devices">
                 <div class="title">Devices</div>
                 <div>
-                    <label for="videoSelect">Kamera:</label>
+                    <label for="videoSelect">Camera:</label>
                     <select id="videoSelect"></select>
-                    <label for="audioSelect">Mikrofon:</label>
+                    <label for="audioSelect">Microphone:</label>
                     <select id="audioSelect"></select>
                 </div>
                 <div>
-                    <label for="midiSelect">MIDI-Eingang:</label>
+                    <label for="midiSelect">MIDI-Input:</label>
                     <select id="midiSelect"></select>
-                    <label for="midiOutputSelect">MIDI-Ausgang:</label>
+                    <label for="midiOutputSelect">MIDI-Output:</label>
                     <select id="midiOutputSelect"></select>
                 </div>
                 <div class="volume-controls-container">
@@ -71,14 +71,21 @@
                  <div class="title">Tools</div>
                  <button id="toggleMetronome" disabled>Metronom</button>
                  <button id="shareScreenButton" disabled>Bildschirm teilen</button>
-            </section>
-            <section id="log">
-                <div class="title">Log</div>
-                <div id="log-msgs"></div>
+                 <button id="toggleLogButton">Log</button>
             </section>
         </section>
         <section id="piano"></section>
     </main>
+
+    <div id="log-modal" class="log-modal-overlay hidden">
+        <div class="log-modal-content">
+            <div class="log-modal-header">
+                <h2>Log</h2>
+                <button id="log-modal-close" class="log-modal-close-btn" title="Close Log">×</button>
+            </div>
+            <div id="log-container" class="log-container"></div>
+        </div>
+    </div>
 
     <script src="js/app.js" type="module"></script>
 </body>

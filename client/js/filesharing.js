@@ -7,6 +7,11 @@ export class FileSharing {
             throw new Error(`FileSharing container '${options.container}' not found.`);
         }
         this.onSendData = options.onSendData;
+        this.logger = options.logger || {
+            info: console.log,
+            debug: console.log,
+            error: console.error
+        };
 
         this.activeTransfers = new Map();
         this.isEnabled = false;
@@ -55,6 +60,7 @@ export class FileSharing {
         this.container.classList.remove('disabled');
         this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Drop files here';
         this.dropZoneEl.querySelector('.dropzone-text-sub').style.display = 'block';
+        this.logger.info('Filesharing enabled.');
     }
 
     disable() {
@@ -62,6 +68,7 @@ export class FileSharing {
         this.container.classList.add('disabled');
         this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Connection required';
         this.dropZoneEl.querySelector('.dropzone-text-sub').style.display = 'none';
+        this.logger.info('Filesharing disabled.');
 
         this.activeTransfers.forEach(transfer => {
             if (!transfer.completed) {
@@ -72,6 +79,7 @@ export class FileSharing {
 
     setChannel(channel) {
         this.channel = channel;
+        this.logger.info(`Filesharing data channel has been ${channel ? 'set' : 'cleared'}.`);
     }
 
     _handleDragOver(event) {
@@ -101,7 +109,7 @@ export class FileSharing {
 
     _processFiles(files) {
         if (files.length === 0) return;
-        console.log(`Processing ${files.length} file(s) for transfer.`);
+        this.logger.info(`Processing ${files.length} file(s) for transfer.`);
         for (const file of files) {
             this._sendFile(file);
         }
@@ -109,6 +117,7 @@ export class FileSharing {
 
     async _sendFile(file) {
         const transferId = this._generateId();
+        this.logger.info(`Starting send for file: ${file.name} (ID: ${transferId}, Size: ${this._formatBytes(file.size)})`);
         const fileItemEl = this._createFileItemUI(transferId, file.name, file.size, true);
         const startTime = Date.now();
 
@@ -144,7 +153,7 @@ export class FileSharing {
         }
 
         this._finalizeTransfer(transferId, new Blob([arrayBuffer], { type: file.type }));
-        this.sentSound.play().catch(e => console.error("Error playing sound:", e));
+        this.sentSound.play().catch(e => this.logger.error("Error playing sent sound:", e));
     }
 
     handleRemoteData(data) {
@@ -155,7 +164,7 @@ export class FileSharing {
                     this._handleInfoPacket(packet);
                 }
             } catch (e) {
-                console.error("Failed to parse file info packet:", e);
+                this.logger.error("Failed to parse file info packet:", e);
             }
         } else if (data instanceof ArrayBuffer) {
             this._handleChunkPacket(data);
@@ -163,6 +172,7 @@ export class FileSharing {
     }
 
     _handleInfoPacket(packet) {
+        this.logger.info(`Receiving new file: ${packet.name} (ID: ${packet.id}, Size: ${this._formatBytes(packet.size)})`);
         const fileItemEl = this._createFileItemUI(packet.id, packet.name, packet.size, false);
         const transfer = {
             id: packet.id,
@@ -181,7 +191,7 @@ export class FileSharing {
 
     _handleChunkPacket(data) {
         if (!this.currentReceiveId) {
-            console.warn("Received a chunk packet without an active file transfer. Ignoring.");
+            this.logger.info("Received a chunk packet without an active file transfer. Ignoring.");
             return;
         }
 
@@ -199,7 +209,7 @@ export class FileSharing {
         if (transfer.receivedSize >= transfer.size) {
             const fileBlob = new Blob(transfer.chunks, { type: transfer.type });
             this._finalizeTransfer(transfer.id, fileBlob);
-            this.receiveSound.play().catch(e => console.error("Error playing sound:", e));
+            this.receiveSound.play().catch(e => this.logger.error("Error playing receive sound:", e));
             this.currentReceiveId = null;
         }
     }
@@ -248,6 +258,7 @@ export class FileSharing {
     _failTransfer(id, reason) {
         const transfer = this.activeTransfers.get(id);
         if (!transfer) return;
+        this.logger.error(`Transfer ${id} failed. Reason: ${reason}`);
 
         transfer.completed = true;
         transfer.element.classList.add('failed');
@@ -260,6 +271,10 @@ export class FileSharing {
         const transfer = this.activeTransfers.get(id);
         if (!transfer) return;
 
+        const fileName = transfer.file ? transfer.file.name : transfer.name;
+        const direction = transfer.file ? 'Sent' : 'Received';
+        this.logger.info(`Transfer ${id} finalized. ${direction} ${fileName} successfully.`);
+
         transfer.completed = true;
         transfer.element.querySelector('.progress-container').style.display = 'none';
         transfer.element.querySelector('.status-text').style.display = 'none';
@@ -267,7 +282,6 @@ export class FileSharing {
         const actionLink = transfer.element.querySelector('.file-action');
         actionLink.style.display = 'block';
 
-        const fileName = transfer.file ? transfer.file.name : transfer.name;
         const fileType = transfer.file ? transfer.file.type : transfer.type;
 
         actionLink.onclick = (e) => {

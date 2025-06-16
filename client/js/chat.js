@@ -2,6 +2,11 @@ export class Chat {
     constructor(options) {
         this.container = options.container;
         this.onSendMessage = options.onSendMessage;
+        this.logger = options.logger || {
+            info: console.log,
+            debug: console.log,
+            error: console.error
+        };
 
         this.messagesEl = this.container.querySelector('.chat-messages');
         this.formEl = this.container.querySelector('.chat-form');
@@ -17,6 +22,7 @@ export class Chat {
     init() {
         this.formEl.addEventListener('submit', (e) => this.handleFormSubmit(e));
         this.disable();
+        this.logger.info('Chat module initialized.');
     }
 
     handleFormSubmit(event) {
@@ -26,14 +32,16 @@ export class Chat {
         if (message) {
             this.onSendMessage(message);
             this.addMessage(message, 'local');
+            this.logger.debug(`Sending local chat message.`);
             this.inputEl.value = '';
-            this.sentSound.play().catch(e => console.error("Error playing sent sound:", e));
+            this.sentSound.play().catch(e => this.logger.error("Error playing chat sent sound:", e));
         }
     }
 
     handleRemoteMessage(message) {
         this.addMessage(message, 'remote');
-        this.receiveSound.play().catch(e => console.error("Error playing receive sound:", e));
+        this.logger.debug(`Received remote chat message.`);
+        this.receiveSound.play().catch(e => this.logger.error("Error playing chat receive sound:", e));
     }
 
     addMessage(text, sender) {
@@ -67,6 +75,7 @@ export class Chat {
         this.inputEl.disabled = false;
         this.sendButton.disabled = false;
         this.inputEl.placeholder = 'Type message...';
+        this.logger.info('Chat enabled.');
     }
 
     disable() {
@@ -74,5 +83,6 @@ export class Chat {
         this.inputEl.disabled = true;
         this.sendButton.disabled = true;
         this.inputEl.placeholder = 'Chat not connected';
+        this.logger.info('Chat disabled.');
     }
 }
