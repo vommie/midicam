@@ -11,6 +11,7 @@ export class FileSharing {
         this.activeTransfers = new Map();
         this.isEnabled = false;
         this.currentReceiveId = null;
+        this.channel = null;
 
         this.sentSound = new Audio('assets/file_sent.wav');
         this.receiveSound = new Audio('assets/file_receive.wav');
@@ -67,6 +68,10 @@ export class FileSharing {
                 this._failTransfer(transfer.id, "Connection lost");
             }
         });
+    }
+
+    setChannel(channel) {
+        this.channel = channel;
     }
 
     _handleDragOver(event) {
@@ -321,8 +326,8 @@ export class FileSharing {
     _waitForBuffer() {
         return new Promise(resolve => {
             const check = () => {
-                if (this.onSendData.channel && this.onSendData.channel.bufferedAmount > this.onSendData.channel.bufferedAmountLowThreshold) {
-                    setTimeout(check, 50);
+                if (this.channel && this.channel.bufferedAmount > this.channel.bufferedAmountLowThreshold) {
+                    setTimeout(check, 100);
                 } else {
                     resolve();
                 }

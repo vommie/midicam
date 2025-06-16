@@ -760,10 +760,11 @@ function setupMidiChannel(channel) {
 }
 
 function setupChatChannel(channel) {
-    channel.onopen = () => {
+    const handleOpen = () => {
         addLog('Chat data channel opened.');
         chat.enable();
     };
+
     channel.onmessage = (event) => {
         chat.handleRemoteMessage(event.data);
     };
@@ -772,6 +773,12 @@ function setupChatChannel(channel) {
         addLog('Chat data channel closed.');
         chat.disable();
     };
+
+    if (channel.readyState === 'open') {
+        handleOpen();
+    } else {
+        channel.onopen = handleOpen;
+    }
 }
 
 function setupMetronomeChannel(channel) {
@@ -815,10 +822,13 @@ function setupMetronomeChannel(channel) {
 
 function setupFileChannel(channel) {
     channel.binaryType = 'arraybuffer';
-    channel.onopen = () => {
+
+    const handleOpen = () => {
         addLog('File data channel opened.');
+        fileSharing.setChannel(channel);
         fileSharing.enable();
     };
+
     channel.onmessage = (event) => {
         fileSharing.handleRemoteData(event.data);
     };
@@ -829,7 +839,14 @@ function setupFileChannel(channel) {
     channel.onclose = () => {
         addLog('File data channel closed.');
         fileSharing.disable();
+        fileSharing.setChannel(null);
     };
+
+    if (channel.readyState === 'open') {
+        handleOpen();
+    } else {
+        channel.onopen = handleOpen;
+    }
 }
 
 function sendChatMessage() {
@@ -1091,7 +1108,6 @@ async function init() {
             }
         }
     });
-    fileSharing.onSendData.channel = fileChannel;
 
     chat = new Chat({
         container: document.getElementById('chat-container'),
