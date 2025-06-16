@@ -10,6 +10,7 @@ export class FileSharing {
 
         this.activeTransfers = new Map();
         this.isEnabled = false;
+        this.currentReceiveId = null;
 
         this.sentSound = new Audio('assets/file_sent.wav');
         this.receiveSound = new Audio('assets/file_receive.wav');
@@ -25,8 +26,8 @@ export class FileSharing {
             <div class="filesharing-dropzone">
                 <div class="dropzone-content">
                     <svg class="dropzone-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"></path></svg>
-                    <p class="dropzone-text-main">Dateien hierher ziehen</p>
-                    <p class="dropzone-text-sub">oder doppelklicken zum Auswählen</p>
+                    <p class="dropzone-text-main">Drop files here</p>
+                    <p class="dropzone-text-sub">or double click to upload</p>
                 </div>
             </div>
             <div class="filesharing-list" role="log"></div>
@@ -51,19 +52,19 @@ export class FileSharing {
     enable() {
         this.isEnabled = true;
         this.container.classList.remove('disabled');
-        this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Dateien hierher ziehen';
+        this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Drop files here';
         this.dropZoneEl.querySelector('.dropzone-text-sub').style.display = 'block';
     }
 
     disable() {
         this.isEnabled = false;
         this.container.classList.add('disabled');
-        this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Verbindung erforderlich';
+        this.dropZoneEl.querySelector('.dropzone-text-main').textContent = 'Connection required';
         this.dropZoneEl.querySelector('.dropzone-text-sub').style.display = 'none';
 
         this.activeTransfers.forEach(transfer => {
             if (!transfer.completed) {
-                this._failTransfer(transfer.id, "Verbindung getrennt");
+                this._failTransfer(transfer.id, "Connection lost");
             }
         });
     }
@@ -119,25 +120,18 @@ export class FileSharing {
             type: 'info',
             id: transferId,
             name: file.name,
-            type: file.type,
+            mime: file.type,
             size: file.size
         };
-        this.onSendData(new TextEncoder().encode(JSON.stringify(infoPacket)));
+        this.onSendData(JSON.stringify(infoPacket));
 
         const arrayBuffer = await file.arrayBuffer();
         let offset = 0;
 
         while (offset < file.size) {
             await this._waitForBuffer();
-
             const chunk = arrayBuffer.slice(offset, offset + CHUNK_SIZE);
-
-            const chunkPacket = new Uint8Array(chunk.byteLength + 1);
-            chunkPacket[0] = 'C'.charCodeAt(0);
-            chunkPacket.set(new Uint8Array(chunk), 1);
-
-            this.onSendData(chunkPacket);
-
+            this.onSendData(chunk);
             offset += chunk.byteLength;
             const progress = (offset / file.size) * 100;
             const speed = offset / ((Date.now() - startTime) / 1000);
@@ -150,11 +144,15 @@ export class FileSharing {
 
     handleRemoteData(data) {
         if (typeof data === 'string') {
-            const packet = JSON.parse(data);
-            if (packet.type === 'info') {
-                this._handleInfoPacket(packet);
+            try {
+                const packet = JSON.parse(data);
+                if (packet.type === 'info') {
+                    this._handleInfoPacket(packet);
+                }
+            } catch (e) {
+                console.error("Failed to parse file info packet:", e);
             }
-        } else {
+        } else if (data instanceof ArrayBuffer) {
             this._handleChunkPacket(data);
         }
     }
@@ -164,7 +162,7 @@ export class FileSharing {
         const transfer = {
             id: packet.id,
             name: packet.name,
-            type: packet.type,
+            type: packet.mime,
             size: packet.size,
             receivedSize: 0,
             chunks: [],
@@ -177,12 +175,15 @@ export class FileSharing {
     }
 
     _handleChunkPacket(data) {
-        if (!this.currentReceiveId) return;
+        if (!this.currentReceiveId) {
+            console.warn("Received a chunk packet without an active file transfer. Ignoring.");
+            return;
+        }
 
         const transfer = this.activeTransfers.get(this.currentReceiveId);
         if (!transfer || transfer.completed) return;
 
-        const chunk = data.slice(1);
+        const chunk = data;
         transfer.chunks.push(chunk);
         transfer.receivedSize += chunk.byteLength;
 
@@ -321,7 +322,7 @@ export class FileSharing {
         return new Promise(resolve => {
             const check = () => {
                 if (this.onSendData.channel && this.onSendData.channel.bufferedAmount > this.onSendData.channel.bufferedAmountLowThreshold) {
-                    setTimeout(check, 100);
+                    setTimeout(check, 50);
                 } else {
                     resolve();
                 }

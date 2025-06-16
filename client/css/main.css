@@ -320,6 +320,7 @@ video:fullscreen {
     background-color: #1a1a1a;
     transition: background-color 0.2s, border-color 0.2s;
     cursor: pointer;
+    user-select: none;
 }
 
 #filesharing-container:not(.disabled) .filesharing-dropzone:hover {

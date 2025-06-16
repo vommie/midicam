@@ -40,7 +40,7 @@ export class Chat {
         const isScrolledToBottom = this.messagesEl.scrollHeight - this.messagesEl.scrollTop <= this.messagesEl.clientHeight + 20;
 
         const bubble = document.createElement('div');
-        bubble.classList.add('chat-bubble', sender); // sender is 'local' or 'remote'
+        bubble.classList.add('chat-bubble', sender);
 
         const senderName = document.createElement('span');
         senderName.classList.add('sender-name');
@@ -66,13 +66,13 @@ export class Chat {
         this.container.classList.remove('disabled');
         this.inputEl.disabled = false;
         this.sendButton.disabled = false;
-        this.inputEl.placeholder = 'Nachricht eingeben...';
+        this.inputEl.placeholder = 'Type message...';
     }
 
     disable() {
         this.container.classList.add('disabled');
         this.inputEl.disabled = true;
         this.sendButton.disabled = true;
-        this.inputEl.placeholder = 'Chat nicht verbunden';
+        this.inputEl.placeholder = 'Chat not connected';
     }
 }
