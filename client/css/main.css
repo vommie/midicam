@@ -155,24 +155,28 @@ video:fullscreen {
     height: auto;
 }
 
-
-/******************************************************/
-/*          START: CORRECTED SIDEBAR STYLES           */
-/******************************************************/
+/* Sidebar */
 
 #sidebar-right {
     grid-area: sr;
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow-y: auto;
     overflow-x: hidden;
     background-color: #1e1e1e;
     border-left: 1px solid #3a3a3a;
     position: relative;
+    visibility: hidden;
+}
+
+#sidebar-content-wrapper {
+    flex-grow: 1;
+    overflow-y: auto;
     padding: 8px;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-    visibility: hidden; /* Verhindert FOUC */
+    height: 100%;
     scrollbar-width: thin;
     scrollbar-color: #555 #2c2c2c;
 }
