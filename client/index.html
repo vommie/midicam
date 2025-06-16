@@ -11,10 +11,12 @@
 </head>
 <body>
     <main>
+        <div id="additionalStreamsContainer"></div> <!-- NEU: Container für alle Floating Windows -->
         <div id="metronomeContainer"></div>
         <section id="cams">
             <video id="remoteVideo" autoplay></video>
-            <div id="localVideoWrapper">
+            <!-- GEÄNDERT: Dieser Wrapper wird nun von camLocalDrag.js dynamisch durch ein Floating Window ersetzt -->
+            <div id="localVideoWrapper" style="display: none;">
                 <video id="localVideo" autoplay muted></video>
                 <div id="resizeHandle"></div>
             </div>
@@ -71,6 +73,8 @@
             <section id="tools">
                  <div class="title">Tools</div>
                  <button id="toggleMetronome" disabled>Metronom</button>
+                 <!-- NEU: Button für Screen Sharing -->
+                 <button id="shareScreenButton" disabled>Bildschirm teilen</button>
             </section>
             <section id="log">
                 <div class="title">Log</div>
@@ -79,6 +83,8 @@
         </section>
         <section id="piano"></section>
     </main>
+    <!-- NEU: Die neue Klasse muss vor app.js geladen werden -->
+    <script src="js/floatingWindow.js" type="module"></script>
     <script src="js/app.js" type="module"></script>
 </body>
 </html>

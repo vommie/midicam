@@ -79,29 +79,82 @@ video:fullscreen {
     margin: 0 auto;
 }
 
-#localVideoWrapper {
-    position: fixed;
-    z-index: 1000;
-    user-select: none;
-    touch-action: none;
-    cursor: grab;
-}
-
-#localVideo {
+/* NEU: Container für alle Floating Windows */
+#additionalStreamsContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    box-shadow: 0 0 10px rgba(0,0,0,0.3);
-    display: block;
+    pointer-events: none; /* Wichtig, damit Klicks auf den Hintergrund durchgehen */
+    z-index: 1000;
 }
 
-#resizeHandle {
+/* NEU: Styling für die generische Floating-Window-Klasse */
+.floating-window-wrapper {
+    position: absolute; /* Wichtig für die Positionierung via top/right */
+    z-index: 1001; /* Über dem Container, aber unter evtl. Modals */
+    user-select: none;
+    touch-action: none;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    border: 1px solid #555;
+    background-color: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto; /* Fenster selbst sollen klickbar sein */
+}
+
+.floating-window-header {
+    background-color: #333;
+    color: #eee;
+    padding: 4px 8px;
+    cursor: move;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+}
+
+.floating-window-close {
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.floating-window-close:hover {
+    color: #fff;
+    background-color: #c13434;
+}
+
+.floating-window-wrapper video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    background-color: #000;
+}
+
+.floating-window-resize-handle {
     position: absolute;
     bottom: 0;
     right: 0;
     width: 15px;
     height: 15px;
     background: #ccc;
-    cursor: nw-resize;
+    cursor: se-resize;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+.floating-window-resize-handle:hover {
+    opacity: 1;
 }
 
 #sidebar-right {
@@ -249,6 +302,34 @@ video:fullscreen {
 #connection button:hover:not(:disabled) {
     background-color: #45a049;
 }
+
+/* NEU: Styling für Buttons im Tools-Bereich */
+#tools button {
+    padding: 5px 10px;
+    margin-right: 5px;
+    border: 1px solid #888;
+    background-color: #444;
+    color: #ddd;
+    cursor: pointer;
+}
+
+#tools button:hover:not(:disabled) {
+    background-color: #555;
+}
+
+#tools button:disabled {
+    background-color: #333;
+    color: #777;
+    cursor: not-allowed;
+    border-color: #555;
+}
+
+#tools button.active {
+    background-color: #9D1919;
+    border-color: #c13434;
+    color: #fff;
+}
+
 
 .throbber {
     width: 30px;
