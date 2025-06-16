@@ -1,12 +1,9 @@
 export class Chat {
+
     constructor(options) {
         this.container = options.container;
         this.onSendMessage = options.onSendMessage;
-        this.logger = options.logger || {
-            info: console.log,
-            debug: console.log,
-            error: console.error
-        };
+        this.logger = options.logger || { info: console.log, debug: console.log, error: console.error };
 
         this.messagesEl = this.container.querySelector('.chat-messages');
         this.formEl = this.container.querySelector('.chat-form');
@@ -22,7 +19,6 @@ export class Chat {
     init() {
         this.formEl.addEventListener('submit', (e) => this.handleFormSubmit(e));
         this.disable();
-        this.logger.info('Chat module initialized.');
     }
 
     handleFormSubmit(event) {

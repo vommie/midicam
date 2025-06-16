@@ -6,6 +6,7 @@ import { FloatingWindow } from "./floatingWindow.js";
 import { Chat } from './chat.js';
 import { FileSharing } from './filesharing.js';
 import { Log } from './logs.js';
+import { Sidebar } from './sidebar.js';
 
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
@@ -968,13 +969,17 @@ function setEventListeners() {
         adjustMicVolume();
         saveSettings();
         lastMicVolume = micVolume.value;
-        micVolumeIcon.classList.toggle('muted', parseFloat(micVolume.value) === 0);
+        const isMuted = parseFloat(micVolume.value) === 0;
+        micVolumeIcon.classList.toggle('muted', isMuted);
+        micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
     remoteVolume.addEventListener('input', () => {
         adjustRemoteVolume();
         saveSettings();
         lastRemoteVolume = remoteVolume.value;
-        remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
+        const isMuted = parseFloat(remoteVolume.value) === 0;
+        remoteVolumeIcon.classList.toggle('muted', isMuted);
+        remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
 
     micVolumeIcon.addEventListener('click', () => {
@@ -987,6 +992,7 @@ function setEventListeners() {
             micVolumeIcon.classList.remove('muted');
         }
         adjustMicVolume();
+        micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
 
     remoteVolumeIcon.addEventListener('click', () => {
@@ -999,6 +1005,7 @@ function setEventListeners() {
             remoteVolumeIcon.classList.remove('muted');
         }
         adjustRemoteVolume();
+        remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
 
 
@@ -1077,6 +1084,8 @@ function sendMidiMessage(midiData) {
 }
 
 async function init() {
+    new Sidebar();
+
     await populateDeviceOptions();
     await populateMidiOptions();
 
@@ -1089,6 +1098,9 @@ async function init() {
     lastRemoteVolume = remoteVolume.value;
     micVolumeIcon.classList.toggle('muted', parseFloat(micVolume.value) === 0);
     remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
+
+    micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
+    remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
 
     adjustMicVolume();
     setEventListeners();
