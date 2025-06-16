@@ -4,6 +4,7 @@ import { CamLocalDrag } from "./camLocalDrag.js";
 import { MetronomeDrag } from "./metronomeDrag.js";
 import { FloatingWindow } from "./floatingWindow.js";
 import { Chat } from './chat.js';
+import { FileSharing } from './filesharing.js';
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
@@ -16,7 +17,6 @@ const micVolumeIcon = document.getElementById('micVolumeIcon');
 const remoteVolumeIcon = document.getElementById('remoteVolumeIcon');
 const midiSelect = document.getElementById('midiSelect');
 const midiOutputSelect = document.getElementById('midiOutputSelect');
-const fileList = document.getElementById('fileList');
 const serverUrlInput = document.getElementById('serverUrl');
 const startConnectionButton = document.getElementById('startConnection');
 const toggleMetronomeButton = document.getElementById('toggleMetronome');
@@ -35,12 +35,10 @@ let gainNode;
 let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
-let isFileSharingReady = false;
 let isMetronomeVisible = false;
 let lastMicVolume = 1;
 let lastRemoteVolume = 1;
 let ws;
-const CHUNK_SIZE = 65536;
 const MIDI_BUFFER_THRESHOLD = 1024;
 let iceReconnectTimer = null;
 let wsPingInterval = null;
@@ -48,6 +46,7 @@ let wsPingInterval = null;
 const pianos = new Pianos();
 let metronome;
 let chat;
+let fileSharing;
 const activeScreenShares = new Map();
 const pendingStreams = new Map();
 
@@ -55,10 +54,6 @@ const VIDEO_QUALITY = {
     DEFAULT: { maxBitrate: 6000 * 1000 },
     FULLSCREEN: { maxBitrate: 10000 * 1000 }
 };
-
-const fileSentSound = new Audio('assets/file_sent.wav');
-const fileReceiveSound = new Audio('assets/file_receive.wav');
-const fileErrorSound = new Audio('assets/file_error.wav');
 
 function addLog(msg) {
     const line = document.createElement('div');
@@ -622,8 +617,6 @@ async function startConnection() {
         switch (pc.iceConnectionState) {
             case 'connected':
             case 'completed':
-                isFileSharingReady = true;
-                enableFileSharing();
                 connectMidi();
                 toggleMetronomeButton.disabled = false;
                 shareScreenButton.disabled = false;
@@ -654,7 +647,7 @@ async function startConnection() {
 
     midiChannel = pc.createDataChannel('midiChannel', { ordered: false, maxRetransmits: 0 });
     setupMidiChannel(midiChannel);
-    fileChannel = pc.createDataChannel('fileChannel');
+    fileChannel = pc.createDataChannel('fileChannel', { ordered: true });
     setupFileChannel(fileChannel);
     chatChannel = pc.createDataChannel('chatChannel', { ordered: true });
     setupChatChannel(chatChannel);
@@ -722,8 +715,7 @@ function disconnect() {
     fileChannel = null;
     chatChannel = null;
     metronomeChannel = null;
-    isFileSharingReady = false;
-    disableFileSharing();
+    fileSharing.disable();
     chat.disable();
     resetConnectionUI();
 }
@@ -821,222 +813,23 @@ function setupMetronomeChannel(channel) {
     };
 }
 
-let activeReceives = new Map();
-
 function setupFileChannel(channel) {
     channel.binaryType = 'arraybuffer';
     channel.onopen = () => {
         addLog('File data channel opened.');
-        isFileSharingReady = true;
-        enableFileSharing();
+        fileSharing.enable();
     };
     channel.onmessage = (event) => {
-        const data = new Uint8Array(event.data);
-        const header = new TextDecoder().decode(data.slice(0, 1));
-        if (header === 'I') {
-            const info = JSON.parse(new TextDecoder().decode(data.slice(1)));
-            const fileId = `${info.fileName}-${Date.now()}`;
-            const fileInfo = {
-                fileName: info.fileName,
-                fileType: info.fileType,
-                totalBytes: info.totalBytes,
-                chunks: [],
-                fileItem: addFileToList(info.fileName, info.fileType, null, false, true),
-                startTime: Date.now(),
-                receivedBytes: 0
-            };
-            activeReceives.set(fileId, fileInfo);
-            addLog(`Receiving file info: ${info.fileName}, ${info.totalBytes} bytes`);
-        } else if (header === 'C') {
-            for (const [fileId, fileInfo] of activeReceives) {
-                const chunk = data.slice(1);
-                fileInfo.chunks.push(chunk);
-                fileInfo.receivedBytes += chunk.byteLength;
-                const elapsed = (Date.now() - fileInfo.startTime) / 1000;
-                const speed = fileInfo.receivedBytes / elapsed / 1024 / 1024;
-                const percentage = (fileInfo.receivedBytes / fileInfo.totalBytes) * 100;
-                updateFileProgress(fileInfo.fileItem, percentage, speed);
-                if (fileInfo.receivedBytes === fileInfo.totalBytes) {
-                    const fileData = new Blob(fileInfo.chunks);
-                    finalizeFileTransfer(fileInfo.fileItem, fileInfo.fileName, fileInfo.fileType, fileData, false);
-                    addLog(`File reception complete: ${info.fileName}`);
-                    fileReceiveSound.play().catch(err => addLog(`Audio playback error: ${err}`));
-                    activeReceives.delete(fileId);
-                }
-                break;
-            }
-        }
+        fileSharing.handleRemoteData(event.data);
     };
     channel.onerror = (err) => {
         addLog(`File data channel error: ${err.message || err}`);
-        isFileSharingReady = false;
-        disableFileSharing();
+        fileSharing.disable();
     };
     channel.onclose = () => {
         addLog('File data channel closed.');
-        isFileSharingReady = false;
-        disableFileSharing();
+        fileSharing.disable();
     };
-}
-
-function enableFileSharing() {
-    fileList.style.backgroundColor = '#0F0F0F';
-    fileList.style.opacity = '1';
-    fileList.querySelector('p').textContent = 'Drop file here';
-    addLog('File sharing enabled.');
-}
-
-function disableFileSharing() {
-    fileList.style.backgroundColor = 'transparent';
-    fileList.style.opacity = '0.5';
-    fileList.querySelector('p').textContent = 'File sharing unavailable without connection';
-    addLog('File sharing disabled.');
-}
-
-function handleDragOver(event) {
-    event.preventDefault();
-    if (isFileSharingReady) {
-        fileList.classList.add('dragover');
-    }
-}
-
-function handleDragLeave(event) {
-    event.preventDefault();
-    fileList.classList.remove('dragover');
-}
-
-async function handleDrop(event) {
-    event.preventDefault();
-    fileList.classList.remove('dragover');
-    if (!isFileSharingReady) {
-        addLog('Cannot send file: no active connection.');
-        return;
-    }
-    const files = event.dataTransfer.files;
-    if (files.length > 0) {
-        const file = files[0];
-        const fileItem = addFileToList(file.name, file.type, null, true, true);
-        const progressBar = fileItem.querySelector('.progress-bar');
-        const startTime = Date.now();
-        let sentBytes = 0;
-
-        const fileInfo = {
-            fileName: file.name,
-            fileType: file.type,
-            totalBytes: file.size
-        };
-        const infoData = new TextEncoder().encode('I' + JSON.stringify(fileInfo));
-        fileChannel.send(infoData);
-        addLog(`Sending file info: ${file.name}, ${file.size} bytes`);
-
-        const arrayBuffer = await file.arrayBuffer();
-        for (let i = 0; i < file.size; i += CHUNK_SIZE) {
-            const chunk = arrayBuffer.slice(i, Math.min(i + CHUNK_SIZE, file.size));
-            const chunkData = new Uint8Array(chunk.byteLength + 1);
-            chunkData[0] = 'C'.charCodeAt(0);
-            chunkData.set(new Uint8Array(chunk), 1);
-            fileChannel.send(chunkData);
-            sentBytes += chunk.byteLength;
-            const percentage = (sentBytes / file.size) * 100;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = sentBytes / elapsed / 1024 / 1024;
-            progressBar.style.width = `${Math.min(percentage, 100)}%`;
-            updateFileProgress(fileItem, percentage, speed);
-        }
-
-        finalizeFileTransfer(fileItem, file.name, file.type, arrayBuffer, true);
-        addLog(`File sent: ${file.name}`);
-        fileSentSound.play().catch(err => addLog(`Audio playback error: ${err}`));
-    }
-}
-
-function addFileToList(fileName, fileType, fileData, isSent, showProgress = false) {
-    const fileItem = document.createElement('div');
-    fileItem.classList.add('file-item', isSent ? 'sent' : 'received');
-
-    const direction = document.createElement('span');
-    direction.classList.add('direction');
-    direction.textContent = isSent ? '⬆' : '⬇';
-    fileItem.appendChild(direction);
-
-    const icon = document.createElement('img');
-    icon.classList.add('icon');
-    icon.src = 'assets/' + getFileIcon(fileType);
-    fileItem.appendChild(icon);
-
-    const fileLink = document.createElement('a');
-    fileLink.href = '#';
-    fileLink.textContent = fileName;
-    fileLink.style.color = isSent ? 'white' : 'white';
-    fileLink.style.textDecoration = 'underline';
-    fileLink.onclick = (e) => {
-        e.preventDefault();
-        if (fileData) handleFileOpen(fileName, fileType, fileData);
-    };
-    fileItem.appendChild(fileLink);
-
-    if (showProgress) {
-        const progressContainer = document.createElement('div');
-        progressContainer.classList.add('progress-container');
-        const progressBar = document.createElement('div');
-        progressBar.classList.add('progress-bar');
-        progressContainer.appendChild(progressBar);
-        const progressText = document.createElement('span');
-        progressText.classList.add('progress-text');
-        progressText.textContent = '0% (0 MB/s)';
-        fileItem.appendChild(progressContainer);
-        fileItem.appendChild(progressText);
-    }
-
-    fileList.appendChild(fileItem);
-    return fileItem;
-}
-
-function updateFileProgress(fileItem, percentage, speed) {
-    const progressBar = fileItem.querySelector('.progress-bar');
-    const progressText = fileItem.querySelector('.progress-text');
-    progressBar.parentElement.style.display = 'block';
-    progressBar.style.width = `${Math.min(percentage, 100)}%`;
-    progressText.textContent = `${Math.round(percentage)}% (${speed.toFixed(2)} MB/s)`;
-    addLog(`File transfer progress: ${Math.round(percentage)}%`);
-}
-
-function finalizeFileTransfer(fileItem, fileName, fileType, fileData, isSent) {
-    const progressContainer = fileItem.querySelector('.progress-container');
-    const progressText = fileItem.querySelector('.progress-text');
-    if (progressContainer) progressContainer.style.display = 'none';
-    if (progressText) progressText.remove();
-    const fileLink = fileItem.querySelector('a');
-    fileLink.onclick = (e) => {
-        e.preventDefault();
-        if (fileData) {
-            const url = URL.createObjectURL(new Blob([fileData], { type: fileType }));
-            handleFileOpen(fileName, fileType, url);
-        }
-    };
-}
-
-function handleFileOpen(fileName, fileType, url) {
-    if (fileType.startsWith('image/') || fileType === 'application/pdf' || fileType.startsWith('text/')) {
-        window.open(url, '_blank');
-        addLog(`File opened in new tab: ${fileName}`);
-    } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        addLog(`File download initiated: ${fileName}`);
-    }
-}
-
-function getFileIcon(fileType) {
-    if (fileType.startsWith('image/')) return 'file_image.svg';
-    if (fileType === 'application/pdf') return 'file_pdf.svg';
-    if (fileType.startsWith('text/')) return 'file_text.svg';
-    if (fileType.startsWith('audio/')) return 'file_audio.svg';
-    if (fileType.startsWith('video/')) return 'file_video.svg';
-    if (fileType === 'application/zip' || fileType === 'application/x-rar-compressed') return 'file_archive.svg';
-    return 'file_generic.svg';
 }
 
 function sendChatMessage() {
@@ -1225,11 +1018,6 @@ function setEventListeners() {
         metronome.claimMastership();
     });
 
-
-    fileList.addEventListener('dragover', handleDragOver);
-    fileList.addEventListener('dragleave', handleDragLeave);
-    fileList.addEventListener('drop', handleDrop);
-
     function toggleFullscreen(element) {
         const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
         if (!fullscreenElement) {
@@ -1291,9 +1079,19 @@ async function init() {
     remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
 
     adjustMicVolume();
-    disableFileSharing();
-
     setEventListeners();
+
+    fileSharing = new FileSharing({
+        container: '#filesharing-container',
+        onSendData: (data) => {
+            if (fileChannel && fileChannel.readyState === 'open') {
+                fileChannel.send(data);
+            } else {
+                addLog('File data could not be sent: Data channel is not open.');
+            }
+        }
+    });
+    fileSharing.onSendData.channel = fileChannel;
 
     chat = new Chat({
         container: document.getElementById('chat-container'),
