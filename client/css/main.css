@@ -521,6 +521,66 @@ video:fullscreen {
     --p: 100%;
 }
 
+@keyframes mic-glow-pulse {
+    0% { box-shadow: 0 0 5px rgba(88, 192, 92, 0.7), 0 0 10px rgba(88, 192, 92, 0.5); }
+    50% { box-shadow: 0 0 15px rgba(88, 192, 92, 1), 0 0 25px rgba(88, 192, 92, 0.8); }
+    100% { box-shadow: 0 0 5px rgba(88, 192, 92, 0.7), 0 0 10px rgba(88, 192, 92, 0.5); }
+}
+
+@keyframes remote-glow-pulse {
+    0% { box-shadow: 0 0 5px rgba(193, 52, 52, 0.7), 0 0 10px rgba(193, 52, 52, 0.5); }
+    50% { box-shadow: 0 0 15px rgba(193, 52, 52, 1), 0 0 25px rgba(193, 52, 52, 0.8); }
+    100% { box-shadow: 0 0 5px rgba(193, 52, 52, 0.7), 0 0 10px rgba(193, 52, 52, 0.5); }
+}
+
+#sidebar-right input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #ccc;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #333;
+    transition: background-color 0.2s, box-shadow 0.2s ease-out;
+}
+
+#sidebar-right #micVolume:active::-webkit-slider-thumb {
+    box-shadow: 0 0 12px 4px rgba(76, 175, 80, 0.7);
+}
+
+#sidebar-right #remoteVolume:active::-webkit-slider-thumb {
+    box-shadow: 0 0 12px 4px rgba(157, 25, 25, 0.7);
+}
+
+#sidebar-right #micVolume:active::-moz-range-thumb {
+    animation: mic-glow-pulse 1.8s ease-in-out infinite;
+}
+
+#sidebar-right #remoteVolume:active::-moz-range-thumb {
+    animation: remote-glow-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes mic-track-glow {
+    0% { box-shadow: 0 0 4px rgba(76, 175, 80, 0.5); }
+    50% { box-shadow: 0 0 12px rgba(76, 175, 80, 0.9); }
+    100% { box-shadow: 0 0 4px rgba(76, 175, 80, 0.5); }
+}
+
+@keyframes remote-track-glow {
+    0% { box-shadow: 0 0 4px rgba(157, 25, 25, 0.5); }
+    50% { box-shadow: 0 0 12px rgba(157, 25, 25, 0.9); }
+    100% { box-shadow: 0 0 4px rgba(157, 25, 25, 0.5); }
+}
+
+#sidebar-right #micVolume:active {
+    animation: mic-track-glow 1.5s ease-in-out infinite;
+}
+
+#sidebar-right #remoteVolume:active {
+    animation: remote-track-glow 1.5s ease-in-out infinite;
+}
+
 #sidebar-right #micVolume {
     background: linear-gradient(to right, #4CAF50 0%, #4CAF50 var(--p, 100%), #444 var(--p, 100%), #444 100%);
 }
