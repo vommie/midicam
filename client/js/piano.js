@@ -596,7 +596,6 @@ class Piano {
         if (!this.isKeyInRange(id)) return;
 
         this.lastKeyId = id;
-        this.logger.debug(`Piano ${this.id}: key ${id} pressed: ${this.getKeyName(id, true)}`);
         this.addKeyPressedStyle(this.elements.keys[id]);
         this.playNote(id);
         this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
@@ -607,7 +606,6 @@ class Piano {
         let id = e.currentTarget.dataset.id;
         if (!this.isKeyInRange(id)) return;
 
-        this.logger.debug(`Piano ${this.id}: key ${id} released: ${this.getKeyName(id, true)}`);
         this.removeKeyPressedStyle(this.elements.keys[id]);
         this.stopNote(id);
         this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
@@ -618,8 +616,6 @@ class Piano {
         let id = e.currentTarget.dataset.id;
         if (!this.isKeyInRange(id)) return;
         if (id == this.lastKeyId) return;
-
-        this.logger.debug(`Piano ${this.id}: gliss from key ${this.lastKeyId} to ${id}`);
         this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
         this.stopNote(this.lastKeyId);
         this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
@@ -666,7 +662,6 @@ class Piano {
         let keyWhiteWidth = pianoRect.width/this.elements.piano.barWhite.childElementCount;
         let factor = keyWhiteWidth/20;
         this.scaleFactor = factor;
-        this.logger.debug(`Piano ${this.id}: scaling factor updated to ${factor}`);
         let keyBlackWidth = keyWhiteWidth/4;
         this.elements.piano.container.style.maxWidth = `${pianoRect.width}px`;
         this.elements.piano.barWhite.style.gridAutoColumns = `${keyWhiteWidth}px`;
