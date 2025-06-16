@@ -164,6 +164,7 @@ video:fullscreen {
 #sidebar-content-wrapper {
     flex-grow: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -234,7 +235,7 @@ video:fullscreen {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 12px;
+    padding: 0px 12px;
     cursor: pointer;
     user-select: none;
     background-color: #333;
@@ -317,7 +318,7 @@ video:fullscreen {
 }
 
 #sidebar-right button {
-    padding: 9px 15px;
+    padding: 5px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -328,14 +329,6 @@ video:fullscreen {
     align-items: center;
     justify-content: center;
     gap: 8px;
-}
-
-#sidebar-right button:hover:not(:disabled) {
-    transform: translateY(-1px);
-}
-
-#sidebar-right button:active:not(:disabled) {
-    transform: translateY(0);
 }
 
 #sidebar-right button:disabled {
@@ -448,8 +441,8 @@ video:fullscreen {
 
 #sidebar-right .mute-button {
     flex-shrink: 0;
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     padding: 6px;
     background-color: #3a3a3a;
     border: 1px solid #555;
@@ -477,6 +470,11 @@ video:fullscreen {
 
 #sidebar-right .mute-button.muted .icon-vol-off {
     display: block;
+}
+
+#sidebar-right .mute-button svg {
+    filter: invert(1);
+    padding: 3px;
 }
 
 #sidebar-right input[type="range"] {
@@ -566,6 +564,17 @@ video:fullscreen {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(-12px);
+}
+
+#sidebar-right #devices {
+    container-type: inline-size;
+}
+
+@container (min-width: 350px) {
+    #sidebar-right #devices .sidebar-section-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 /* File Sharing */
@@ -837,18 +846,13 @@ video:fullscreen {
 }
 
 #chat-container .chat-send-button {
-    flex-shrink: 0;
-    width: 38px;
-    height: 38px;
-    padding: 0;
+    width: 32px;
+    height: 34px;
+    padding: 4px;
     border: none;
     background-color: #4CAF50;
     color: white;
-    border-radius: 50%;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     transition: background-color 0.2s;
 }
 
