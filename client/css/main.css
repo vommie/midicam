@@ -639,6 +639,50 @@ video:fullscreen {
     background-color: #c13434;
 }
 
+.log-modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 15px;
+    background-color: #252525;
+    border-bottom: 1px solid #444;
+}
+
+.log-search-input {
+    flex-grow: 1;
+    padding: 5px 8px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: #eee;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.log-level-filter {
+    padding: 5px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: #eee;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.log-export-btn {
+    padding: 5px 12px;
+    border: 1px solid #888;
+    background-color: #444;
+    color: #ddd;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.log-export-btn:hover {
+    background-color: #555;
+}
+
+
 .log-container {
     flex-grow: 1;
     overflow-y: auto;
@@ -662,6 +706,10 @@ video:fullscreen {
     color: #ddd;
     align-items: start;
     word-break: break-word;
+}
+
+.log-entry.hidden {
+    display: none;
 }
 
 .log-entry .timestamp {
