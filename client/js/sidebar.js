@@ -21,6 +21,8 @@ export class Sidebar {
         this.boundShowTooltip = this.showTooltip.bind(this);
         this.boundHideTooltip = this.hideTooltip.bind(this);
 
+        this.tooltipTimer = null;
+
         this.init();
     }
 
@@ -96,32 +98,37 @@ export class Sidebar {
         const tooltipText = triggerEl.getAttribute('data-tooltip');
         if (!tooltipText) return;
 
-        this.tooltipEl.textContent = tooltipText;
-        this.tooltipEl.classList.add('visible');
+        clearTimeout(this.tooltipTimer);
 
-        const triggerRect = triggerEl.getBoundingClientRect();
-        const sidebarRect = this.sidebar.getBoundingClientRect();
-        const tooltipRect = this.tooltipEl.getBoundingClientRect();
+        this.tooltipTimer = setTimeout(() => {
+            this.tooltipEl.textContent = tooltipText;
+            this.tooltipEl.classList.add('visible');
 
-        const top = triggerRect.top - sidebarRect.top - tooltipRect.height - 8;
+            const triggerRect = triggerEl.getBoundingClientRect();
+            const sidebarRect = this.sidebar.getBoundingClientRect();
+            const tooltipRect = this.tooltipEl.getBoundingClientRect();
 
-        let left = triggerRect.left - sidebarRect.left + (triggerRect.width / 2) - (tooltipRect.width / 2);
+            const top = triggerRect.top - sidebarRect.top - tooltipRect.height - 8;
 
-        const sidebarPadding = 8;
+            let left = triggerRect.left - sidebarRect.left + (triggerRect.width / 2) - (tooltipRect.width / 2);
 
-        if (left < sidebarPadding) {
-            left = sidebarPadding;
-        }
+            const sidebarPadding = 8;
 
-        if (left + tooltipRect.width > sidebarRect.width - sidebarPadding) {
-            left = sidebarRect.width - tooltipRect.width - sidebarPadding;
-        }
+            if (left < sidebarPadding) {
+                left = sidebarPadding;
+            }
 
-        this.tooltipEl.style.top = `${top}px`;
-        this.tooltipEl.style.left = `${left}px`;
+            if (left + tooltipRect.width > sidebarRect.width - sidebarPadding) {
+                left = sidebarRect.width - tooltipRect.width - sidebarPadding;
+            }
+
+            this.tooltipEl.style.top = `${top}px`;
+            this.tooltipEl.style.left = `${left}px`;
+        }, 500);
     }
 
     hideTooltip() {
+        clearTimeout(this.tooltipTimer);
         this.tooltipEl.classList.remove('visible');
     }
 
