@@ -35,6 +35,7 @@ let midiChannel;
 let fileChannel;
 let chatChannel;
 let metronomeChannel;
+let commonDataChannel;
 let localStream;
 let audioContext;
 let gainNode = null;
@@ -48,6 +49,7 @@ let ws;
 const MIDI_BUFFER_THRESHOLD = 1024;
 let iceReconnectTimer = null;
 let wsPingInterval = null;
+let isSelfMuted = false;
 
 const pianos = new Pianos();
 let metronome;
@@ -267,10 +269,12 @@ async function startMedia() {
         } else {
             logger.debug("No audio track in the new raw stream. Clearing gainNode.");
             gainNode = null;
-            if (micVolume.value !== "0") {
-                micVolume.value = 0;
-                micVolume.dispatchEvent(new Event('input', { bubbles: true }));
+
+            if (!isSelfMuted) {
+                sendSelfMuteStatus(true);
+                camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
             }
+
         }
 
         const allTracks = [...videoTracks];
@@ -344,9 +348,9 @@ async function switchMedia() {
         } else {
             logger.debug("No audio track in the new stream. Clearing gainNode.");
             gainNode = null;
-            if (micVolume.value !== "0") {
-                micVolume.value = 0;
-                micVolume.dispatchEvent(new Event('input', { bubbles: true }));
+            if (!isSelfMuted) {
+                sendSelfMuteStatus(true);
+                camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
             }
         }
 
@@ -791,6 +795,8 @@ async function startConnection() {
     setupChatChannel(chatChannel);
     metronomeChannel = pc.createDataChannel('metronomeChannel', { ordered: true });
     setupMetronomeChannel(metronomeChannel);
+    commonDataChannel = pc.createDataChannel('commonDataChannel', { ordered: true });
+    setupCommonDataChannel(commonDataChannel)
 
     pc.ondatachannel = (event) => {
         if (event.channel.label === 'midiChannel') {
@@ -805,6 +811,9 @@ async function startConnection() {
         } else if (event.channel.label === 'metronomeChannel') {
             metronomeChannel = event.channel;
             setupMetronomeChannel(metronomeChannel);
+        } else if (event.channel.label === 'commonDataChannel') {
+            commonDataChannel = event.channel;
+            setupCommonDataChannel(commonDataChannel);
         }
     };
 
@@ -842,7 +851,6 @@ function disconnect() {
     remotePlaceholder.classList.add('active');
     remoteMuteIndicator.classList.remove('active');
     peerSelfMutedIndicator.classList.remove('active');
-    camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
     camLocalDrag.floatingWindow.setPeerMutedMeIndicatorActive(false);
 
     logger.debug('remoteVideo element reset and loaded');
@@ -857,6 +865,7 @@ function disconnect() {
     fileChannel = null;
     chatChannel = null;
     metronomeChannel = null;
+    commonDataChannel = null;
     fileSharing.disable();
     chat.disable();
     resetConnectionUI();
@@ -921,6 +930,27 @@ function setupChatChannel(channel) {
     }
 }
 
+function setupCommonDataChannel(channel) {
+    channel.onopen = () => {
+        logger.info('Common data channel opened.');
+        if(gainNode) sendSelfMuteStatus(isSelfMuted);
+        else sendSelfMuteStatus(true);
+    };
+    channel.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+            case 'self_mute_status':
+                logger.info(`Peer has ${msg.muted ? 'muted' : 'unmuted'} their microphone.`);
+                peerSelfMutedIndicator.classList.toggle('active', msg.muted);
+                break;
+        }
+    };
+    channel.onerror = (err) => logger.error(`Common data channel error: ${err.message || err}`);
+    channel.onclose = () => {
+        logger.info('Common data channel closed.');
+    };
+}
+
 function setupMetronomeChannel(channel) {
     channel.onopen = () => {
         logger.info('Metronome data channel opened.');
@@ -960,24 +990,13 @@ function setupMetronomeChannel(channel) {
     };
     channel.onerror = (err) => logger.error(`Metronome data channel error: ${err.message || err}`);
     channel.onclose = () => {
-         logger.info('Metronome data channel closed.');
+        logger.info('Metronome data channel closed.');
         toggleMetronomeButton.disabled = true;
         metronomeContainer.classList.remove('visible', 'master', 'slave');
         toggleMetronomeButton.classList.remove('active');
         isMetronomeVisible = false;
         if(metronome) metronome.pause();
     };
-}
-
-function sendMuteStatusUpdate(isMuted) {
-    if (metronomeChannel && metronomeChannel.readyState === 'open') {
-        const payload = {
-            type: 'mute_status',
-            muted: isMuted
-        };
-        metronomeChannel.send(JSON.stringify(payload));
-        logger.debug(`Sent mute status update to peer: You ${isMuted ? 'muted' : 'unmuted'} them.`);
-    }
 }
 
 function setupFileChannel(channel) {
@@ -1134,11 +1153,20 @@ function setEventListeners() {
         adjustMicVolume();
         saveSettings();
         lastMicVolume = micVolume.value;
-        const isMuted = parseFloat(micVolume.value) === 0;
-        micVolumeIcon.classList.toggle('muted', isMuted);
-        camLocalDrag.floatingWindow.setMuteIndicatorActive(isMuted);
+        const isMutedNow = parseFloat(micVolume.value) === 0;
+
+        if (isMutedNow !== isSelfMuted) {
+            isSelfMuted = isMutedNow;
+            if(gainNode) sendSelfMuteStatus(isSelfMuted);
+            else sendSelfMuteStatus(true);
+        }
+
+        micVolumeIcon.classList.toggle('muted', isMutedNow);
+        if(gainNode) camLocalDrag.floatingWindow.setMuteIndicatorActive(isMutedNow);
+        else camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
         micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
+
     remoteVolume.addEventListener('input', () => {
         adjustRemoteVolume();
         saveSettings();
@@ -1150,15 +1178,22 @@ function setEventListeners() {
     });
 
     micVolumeIcon.addEventListener('click', () => {
-        const isMuted = parseFloat(micVolume.value) > 0;
-        if (isMuted) {
+        const isCurrentlyMuted = parseFloat(micVolume.value) === 0;
+        if (!isCurrentlyMuted) {
             lastMicVolume = micVolume.value;
             micVolume.value = 0;
+            sendSelfMuteStatus(true);
+            isSelfMuted = true;
         } else {
             micVolume.value = lastMicVolume;
+            if(gainNode) sendSelfMuteStatus(false);
+            else sendSelfMuteStatus(true);
+            isSelfMuted = false;
         }
-        micVolumeIcon.classList.toggle('muted', isMuted);
-        camLocalDrag.floatingWindow.setMuteIndicatorActive(isMuted);
+        micVolumeIcon.classList.toggle('muted', !isCurrentlyMuted);
+        if(gainNode) camLocalDrag.floatingWindow.setMuteIndicatorActive(!isCurrentlyMuted);
+        else camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
+
         adjustMicVolume();
         micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
@@ -1239,6 +1274,28 @@ function setEventListeners() {
     document.addEventListener('mozfullscreenchange', onFullscreenChange);
 }
 
+function sendSelfMuteStatus(isMuted) {
+    if (commonDataChannel && commonDataChannel.readyState === 'open') {
+        const payload = {
+            type: 'self_mute_status',
+            muted: isMuted
+        };
+        commonDataChannel.send(JSON.stringify(payload));
+        logger.info(`Sent self-mute status to peer: ${isMuted ? 'muted' : 'unmuted'}.`);
+    }
+}
+
+function sendMuteStatusUpdate(isMuted) {
+    if (commonDataChannel && commonDataChannel.readyState === 'open') {
+        const payload = {
+            type: 'mute_status',
+            muted: isMuted
+        };
+        commonDataChannel.send(JSON.stringify(payload));
+        logger.debug(`Sent mute status update to peer: You ${isMuted ? 'muted' : 'unmuted'} them.`);
+    }
+}
+
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
         if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
@@ -1279,10 +1336,11 @@ async function init() {
     lastMicVolume = micVolume.value;
     lastRemoteVolume = remoteVolume.value;
     const isMicMuted = parseFloat(micVolume.value) === 0;
+    isSelfMuted = isMicMuted;
     const isRemoteMuted = parseFloat(remoteVolume.value) === 0;
     micVolumeIcon.classList.toggle('muted', isMicMuted);
     remoteVolumeIcon.classList.toggle('muted', isRemoteMuted);
-    camLocalDrag.floatingWindow.setMuteIndicatorActive(isMicMuted);
+    if(!gainNode || isMicMuted) camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
     remoteMuteIndicator.classList.toggle('active', isRemoteMuted);
 
     remotePlaceholder.classList.add('active');
