@@ -38,6 +38,12 @@ wss.on('connection', (ws) => {
     clients.push(clientInfo);
     console.log(`Current participants: ${clients.length}`);
 
+    if (clients.length === 2) {
+        console.log('Two clients connected. Signaling peer-ready to the first client.');
+        clients[0].ws.send(JSON.stringify({ type: 'peer-ready' }));
+        clients[1].ws.send(JSON.stringify({ type: 'wait-for-offer' })); // Optional, aber gut für's Debugging
+    }
+
     ws.on('message', (message) => {
         let msg;
         try {

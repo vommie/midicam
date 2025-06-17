@@ -248,13 +248,11 @@ async function startMedia() {
             const newAudioTrack = destination.stream.getAudioTracks()[0];
             const videoTracks = localStream.getVideoTracks();
 
-            // Create a new stream with the processed audio and original video
             localStream = new MediaStream([...videoTracks, newAudioTrack]);
         } else {
             gainNode = null;
         }
 
-        // **Fix:** Assign the final stream to the floating window's video element
         camLocalDrag.floatingWindow.video.srcObject = localStream;
 
         currentVideoId = videoSelect.value;
@@ -302,7 +300,6 @@ async function switchMedia() {
                 await audioSender.replaceTrack(audioTrack);
                 logger.info(`Audio track ${audioTrack ? 'replaced' : 'removed'}.`);
             }
-            updateVideoEncodingParameters(!!document.fullscreenElement);
         }
 
         logger.info('Media devices switched.');
@@ -444,27 +441,16 @@ async function startConnection() {
     const protocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
     ws = new WebSocket(`${protocol}://${serverIp}:${serverPort}`);
 
-    ws.onopen = async () => {
-        logger.info('WebSocket connection opened.');
+    ws.onopen = () => {
+        logger.info('WebSocket connection opened. Waiting for peer...');
         if (wsPingInterval) clearInterval(wsPingInterval);
         wsPingInterval = setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ping' }));
             }
         }, 30000);
-
-        try {
-            logger.debug(`RTCPeerConnection state before createOffer: ${pc.signalingState}`);
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            logger.debug(`LocalDescription set: ${pc.localDescription.type}`);
-            ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
-            logger.info('Offer sent.');
-        } catch (err) {
-            logger.error(`Error creating offer: ${err}`);
-            resetConnectionUI();
-        }
     };
+
     ws.onerror = (err) => {
         logger.error(`WebSocket error: ${err.message || 'Unknown error'}`);
     };
@@ -474,6 +460,7 @@ async function startConnection() {
            disconnect();
         }
     };
+
     ws.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ping' || msg.type === 'pong') return;
@@ -484,88 +471,99 @@ async function startConnection() {
              logger.debug(`Received WebSocket message: ${JSON.stringify(msg)}`);
         }
 
-        if (msg.type === 'error') {
-            logger.error(`Server error: ${msg.message}`);
-            disconnect();
-            return;
-        }
-        if (msg.type === 'disconnected-by-peer' || msg.type === 'peer-disconnected') {
-            logger.info('Connection closed by peer.');
-            disconnect();
-            return;
-        }
-        if (msg.type === 'new-stream') {
-            logger.info(`Peer is sharing a new stream: ${msg.streamName} (${msg.streamId})`);
-            pendingStreams.set(msg.streamId, { name: msg.streamName });
-            return;
-        }
-        if (msg.type === 'stop-stream') {
-            logger.info(`Peer stopped sharing stream: ${msg.streamId}`);
-            stopScreenShare(msg.streamId, false);
-            return;
-        }
-        if (msg.type === 'offer') {
-            try {
-                logger.debug(`RTCPeerConnection state before setRemoteDescription (offer): ${pc.signalingState}`);
-                await pc.setRemoteDescription(new RTCSessionDescription(msg));
-                logger.debug('RemoteDescription (offer) set.');
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                logger.debug(`LocalDescription (answer) set: ${pc.localDescription.type}`);
-                ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
-                logger.info('Answer sent.');
-                while (pendingIceCandidates.length > 0) {
-                    const candidate = pendingIceCandidates.shift();
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    logger.debug('Queued ICE candidate added.');
+        switch(msg.type) {
+            case 'peer-ready':
+                logger.info("Peer is ready. I am the caller, starting negotiation.");
+                await negotiate();
+                break;
+
+            case 'wait-for-offer':
+                logger.info("I am the callee. Waiting for an offer from the peer.");
+                break;
+
+            case 'offer':
+                if (pc.signalingState !== 'stable') {
+                    logger.warn(`Glare detected during offer handling, but this shouldn't happen in a controlled setup. State: ${pc.signalingState}`);
+                    return;
                 }
-            } catch (err) {
-                logger.error(`Error processing offer: ${err}`);
-            }
-        } else if (msg.type === 'answer') {
-            try {
-                logger.debug(`RTCPeerConnection state before setRemoteDescription (answer): ${pc.signalingState}`);
-                await pc.setRemoteDescription(new RTCSessionDescription(msg));
-                logger.debug('RemoteDescription (answer) set.');
-                while (pendingIceCandidates.length > 0) {
-                    const candidate = pendingIceCandidates.shift();
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    logger.debug('Queued ICE candidate added.');
+                try {
+                    logger.debug(`Received offer, setting remote description.`);
+                    await pc.setRemoteDescription(new RTCSessionDescription(msg));
+
+                    logger.debug(`Creating answer.`);
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+
+                    ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription.sdp }));
+                    logger.info('Answer sent.');
+                } catch (err) {
+                    logger.error(`Error processing offer: ${err}`);
                 }
-            } catch (err)
-{
-                logger.error(`Error processing answer: ${err}`);
-            }
-        } else if (msg.type === 'candidate') {
-            if (pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-                logger.debug('ICE candidate received and added.');
-            } else {
-                pendingIceCandidates.push(msg.candidate);
-                logger.debug('ICE candidate queued, awaiting remoteDescription.');
-            }
+                break;
+
+            case 'answer':
+                if (pc.signalingState !== 'have-local-offer') {
+                    logger.debug(`Ignoring redundant answer, not in 'have-local-offer' state. Current state: ${pc.signalingState}`);
+                    return;
+                }
+                try {
+                    logger.debug(`Received answer, setting remote description.`);
+                    await pc.setRemoteDescription(new RTCSessionDescription(msg));
+                } catch (err) {
+                    logger.error(`Error processing answer: ${err}`);
+                }
+                break;
+
+            case 'candidate':
+                try {
+                    if (pc.remoteDescription) {
+                        await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                        logger.debug('ICE candidate received and added.');
+                    } else {
+                        pendingIceCandidates.push(msg.candidate);
+                        logger.debug('ICE candidate queued, awaiting remoteDescription.');
+                    }
+                } catch(err) {
+                    if (!`${err}`.includes("The ICE candidate could not be added")) {
+                       logger.error(`Error adding ICE candidate: ${err}`);
+                    }
+                }
+                break;
+
+            case 'error':
+                logger.error(`Server error: ${msg.message}`);
+                disconnect();
+                break;
+            case 'disconnected-by-peer':
+            case 'peer-disconnected':
+                logger.info('Connection closed by peer.');
+                disconnect();
+                break;
+            case 'new-stream':
+                logger.info(`Peer is sharing a new stream: ${msg.streamName} (${msg.streamId})`);
+                pendingStreams.set(msg.streamId, { name: msg.streamName });
+                break;
+            case 'stop-stream':
+                logger.info(`Peer stopped sharing stream: ${msg.streamId}`);
+                stopScreenShare(msg.streamId, false);
+                break;
         }
     };
 
-    pc.onnegotiationneeded = async () => {
+    const negotiate = async () => {
         try {
-            if (pc.signalingState !== 'stable') {
-                logger.debug('Skipping negotiation, signaling state is not stable.');
-                return;
-            }
-            logger.info('Negotiation needed, creating offer...');
+            logger.info('Creating offer...');
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
-                logger.info('Re-negotiation offer sent.');
+                logger.info('Offer sent.');
             }
         } catch (err) {
             logger.error(`Error during negotiation: ${err}`);
         }
     };
-
 
     pc.onicecandidate = (event) => {
         if (event.candidate && ws.readyState === WebSocket.OPEN) {
@@ -634,6 +632,8 @@ async function startConnection() {
         switch (pc.iceConnectionState) {
             case 'connected':
             case 'completed':
+                pc.onnegotiationneeded = negotiate;
+
                 connectMidi();
                 toggleMetronomeButton.disabled = false;
                 shareScreenButton.disabled = false;
@@ -703,6 +703,7 @@ function disconnect() {
         stopScreenShare(streamId, true);
     }
     if (pc) {
+        pc.onnegotiationneeded = null;
         pc.close();
         pc = null;
         logger.info('WebRTC connection closed.');
@@ -924,13 +925,14 @@ async function startScreenShare() {
             logger.debug(`Using fallback title for stream: "${streamName}"`);
         }
 
+        ws.send(JSON.stringify({ type: 'new-stream', streamId, streamName }));
+        logger.info(`Started sharing: ${streamName}`);
+
         const sender = pc.addTrack(track, stream);
         if (!sender) {
             throw new Error('Failed to add screen share track to peer connection.');
         }
 
-        ws.send(JSON.stringify({ type: 'new-stream', streamId, streamName }));
-        logger.info(`Started sharing: ${streamName}`);
 
         const localWindow = new FloatingWindow({
             container: additionalStreamsContainer,
