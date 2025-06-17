@@ -114,6 +114,19 @@ video:fullscreen {
     padding: 6px;
     box-sizing: border-box;
     z-index: 50;
+    transition: opacity 0.3s ease-in-out, background-color 0.3s ease-in-out;
+}
+
+#remoteMuteIndicator {
+    left: 15px; /* Position des ersten Icons */
+}
+
+#peerSelfMutedIndicator {
+    left: 55px; /* Position des zweiten Icons (15px + 32px + 8px Abstand) */
+}
+
+#peerSelfMutedIndicator.active svg {
+    fill: #c13434; /* Rote Füllung für Peer-Aktion */
 }
 
 .mute-indicator.active {
@@ -228,6 +241,64 @@ video:fullscreen {
 .floating-window-resize-handle:hover {
     opacity: 1;
 }
+
+.floating-window-wrapper .mute-indicator {
+    left: 15px; /* Standardposition für lokales Mute */
+    z-index: 1002;
+}
+
+/* --- KORRIGIERTER/NEUER CSS-BEREICH --- */
+.floating-window-wrapper .mute-indicator .icon-vol-on {
+    display: block; /* Standardmäßig ist Ton an */
+}
+.floating-window-wrapper .mute-indicator .icon-vol-off {
+    display: none;
+}
+.floating-window-wrapper .mute-indicator.muted .icon-vol-on {
+    display: none; /* Wenn gemutet, "Ton an" ausblenden */
+}
+.floating-window-wrapper .mute-indicator.muted .icon-vol-off {
+    display: block; /* Wenn gemutet, "Ton aus" einblenden */
+}
+
+.peer-muted-me-indicator {
+    display: none;
+    position: absolute;
+    bottom: 15px;
+    left: 55px; /* Position neben dem lokalen Mute-Icon */
+    width: 32px;
+    height: 32px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    padding: 6px;
+    box-sizing: border-box;
+    z-index: 1002;
+}
+
+.peer-muted-me-indicator.active {
+    display: block;
+    animation: peer-muted-glow 1.8s ease-in-out infinite;
+}
+
+.peer-muted-me-indicator svg {
+    width: 100%;
+    height: 100%;
+    fill: #fff;
+}
+
+@keyframes peer-muted-glow {
+    0% {
+        box-shadow: 0 0 4px rgba(193, 52, 52, 0.7), 0 0 8px rgba(193, 52, 52, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 12px rgba(220, 60, 60, 0.9), 0 0 20px rgba(220, 60, 60, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 4px rgba(193, 52, 52, 0.7), 0 0 8px rgba(193, 52, 52, 0.5);
+    }
+}
+/* --- ENDE KORRIGIERTER BEREICH --- */
+
 
 /* Sidebar */
 

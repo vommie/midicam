@@ -14,6 +14,7 @@ const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const remotePlaceholder = document.getElementById('remotePlaceholder');
 const remoteMuteIndicator = document.getElementById('remoteMuteIndicator');
+const peerSelfMutedIndicator = document.getElementById('peerSelfMutedIndicator');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
@@ -405,8 +406,17 @@ function adjustMicVolume() {
 
 
 function adjustRemoteVolume() {
-    remoteVideo.volume = parseFloat(remoteVolume.value);
+    const lastVolume = remoteVideo.volume;
+    const newVolume = parseFloat(remoteVolume.value);
+    remoteVideo.volume = newVolume;
     logger.debug(`Remote volume set to ${remoteVolume.value}.`);
+
+    const wasMuted = lastVolume === 0;
+    const isMuted = newVolume === 0;
+
+    if (wasMuted !== isMuted) {
+        sendMuteStatusUpdate(isMuted);
+    }
 }
 
 async function connectMidi() {
@@ -659,6 +669,7 @@ async function startConnection() {
             logger.debug('ICE candidate sent.');
         }
     };
+
     pc.ontrack = (event) => {
         const stream = event.streams[0];
         if (!stream) {
@@ -683,9 +694,25 @@ async function startConnection() {
             });
             activeScreenShares.set(streamId, { window: remoteWindow, stream: stream });
             pendingStreams.delete(streamId);
-        } else if (remoteVideo.srcObject?.id !== streamId) {
-            logger.info('Remote main stream received. Attaching to remoteVideo element.');
-            remoteVideo.srcObject = stream;
+        } else {
+            if (remoteVideo.srcObject !== stream) {
+                 logger.info('Remote main stream received. Attaching to remoteVideo element.');
+                 remoteVideo.srcObject = stream;
+                 remoteVideo.play().catch(err => logger.error(`Error playing remote video stream: ${err}`));
+            }
+
+            const audioTrack = stream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.onmute = () => {
+                    logger.info("Remote audio track was muted by the peer.");
+                    peerSelfMutedIndicator.classList.add('active');
+                };
+                audioTrack.onunmute = () => {
+                    logger.info("Remote audio track was unmuted by the peer.");
+                    peerSelfMutedIndicator.classList.remove('active');
+                };
+                peerSelfMutedIndicator.classList.toggle('active', audioTrack.muted);
+            }
 
             if (stream.getVideoTracks().length > 0) {
                 remotePlaceholder.classList.remove('active');
@@ -698,6 +725,9 @@ async function startConnection() {
                 if (e.track.kind === 'video' && stream.getVideoTracks().length === 0) {
                     remotePlaceholder.classList.add('active');
                 }
+                 if (e.track.kind === 'audio') {
+                    peerSelfMutedIndicator.classList.remove('active');
+                }
             };
              stream.onaddtrack = (e) => {
                 logger.info(`A remote track has been added: ${e.track.kind}`);
@@ -705,8 +735,6 @@ async function startConnection() {
                     remotePlaceholder.classList.remove('active');
                 }
             };
-
-            remoteVideo.play().catch(err => logger.error(`Error playing remote video stream: ${err}`));
         }
     };
 
@@ -807,7 +835,9 @@ function disconnect() {
     remoteVideo.load();
     remotePlaceholder.classList.add('active');
     remoteMuteIndicator.classList.remove('active');
+    peerSelfMutedIndicator.classList.remove('active');
     camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
+    camLocalDrag.floatingWindow.setPeerMutedMeIndicatorActive(false);
 
     logger.debug('remoteVideo element reset and loaded');
     gainNode = null;
@@ -894,23 +924,32 @@ function setupMetronomeChannel(channel) {
     };
     channel.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'metronome_sync') {
-            logger.debug(`Metronome sync received: ${JSON.stringify(msg.data)}`);
-            const remoteIsVisible = msg.data.visible;
+        switch (msg.type) {
+            case 'metronome_sync':
+                logger.debug(`Metronome sync received: ${JSON.stringify(msg.data)}`);
+                const remoteIsVisible = msg.data.visible;
 
-            if (!isMetronomeVisible && remoteIsVisible) {
-                isMetronomeVisible = true;
-                metronomeContainer.classList.add('visible');
-                toggleMetronomeButton.classList.add('active');
-            } else if (isMetronomeVisible && !remoteIsVisible) {
-                 isMetronomeVisible = false;
-                 metronomeContainer.classList.remove('visible');
-                 toggleMetronomeButton.classList.remove('active');
-                 metronome.pause();
-            }
-            metronome.setState(msg.data, msg.isMasterClaim);
-        } else if (msg.type === 'metronome_tick') {
-            metronome.handleMasterTick(msg.data);
+                if (!isMetronomeVisible && remoteIsVisible) {
+                    isMetronomeVisible = true;
+                    metronomeContainer.classList.add('visible');
+                    toggleMetronomeButton.classList.add('active');
+                } else if (isMetronomeVisible && !remoteIsVisible) {
+                     isMetronomeVisible = false;
+                     metronomeContainer.classList.remove('visible');
+                     toggleMetronomeButton.classList.remove('active');
+                     metronome.pause();
+                }
+                metronome.setState(msg.data, msg.isMasterClaim);
+                break;
+
+            case 'metronome_tick':
+                metronome.handleMasterTick(msg.data);
+                break;
+
+            case 'mute_status':
+                logger.info(`Received mute status from peer: they ${msg.muted ? 'muted' : 'unmuted'} you.`);
+                camLocalDrag.floatingWindow.setPeerMutedMeIndicatorActive(msg.muted);
+                break;
         }
     };
     channel.onerror = (err) => logger.error(`Metronome data channel error: ${err.message || err}`);
@@ -922,6 +961,17 @@ function setupMetronomeChannel(channel) {
         isMetronomeVisible = false;
         if(metronome) metronome.pause();
     };
+}
+
+function sendMuteStatusUpdate(isMuted) {
+    if (metronomeChannel && metronomeChannel.readyState === 'open') {
+        const payload = {
+            type: 'mute_status',
+            muted: isMuted
+        };
+        metronomeChannel.send(JSON.stringify(payload));
+        logger.debug(`Sent mute status update to peer: You ${isMuted ? 'muted' : 'unmuted'} them.`);
+    }
 }
 
 function setupFileChannel(channel) {
