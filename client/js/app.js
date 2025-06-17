@@ -10,7 +10,6 @@ import { Sidebar } from './sidebar.js';
 
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
-const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
 const remotePlaceholder = document.getElementById('remotePlaceholder');
 const remoteMuteIndicator = document.getElementById('remoteMuteIndicator');
@@ -1025,17 +1024,6 @@ function setupFileChannel(channel) {
         handleOpen();
     } else {
         channel.onopen = handleOpen;
-    }
-}
-
-function sendChatMessage() {
-    const message = messageInput.value.trim();
-    if (message && chatChannel && chatChannel.readyState === 'open') {
-        chatChannel.send(message);
-        addChatMessage(`You: ${message}`);
-        messageInput.value = '';
-    } else {
-        logger.debug('Chat message not sent: channel not open or message is empty.');
     }
 }
 
