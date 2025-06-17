@@ -267,6 +267,10 @@ async function startMedia() {
         } else {
             logger.debug("No audio track in the new raw stream. Clearing gainNode.");
             gainNode = null;
+            if (micVolume.value !== "0") {
+                micVolume.value = 0;
+                micVolume.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         }
 
         const allTracks = [...videoTracks];
@@ -340,6 +344,10 @@ async function switchMedia() {
         } else {
             logger.debug("No audio track in the new stream. Clearing gainNode.");
             gainNode = null;
+            if (micVolume.value !== "0") {
+                micVolume.value = 0;
+                micVolume.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         }
 
         if (pc) {
@@ -393,7 +401,6 @@ async function switchMedia() {
     }
 }
 
-
 function adjustMicVolume() {
     if (gainNode && audioContext) {
         const newVolume = parseFloat(micVolume.value);
@@ -403,7 +410,6 @@ function adjustMicVolume() {
         logger.debug("adjustMicVolume called, but gainNode is not available.");
     }
 }
-
 
 function adjustRemoteVolume() {
     const lastVolume = remoteVideo.volume;

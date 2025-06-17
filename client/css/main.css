@@ -118,15 +118,15 @@ video:fullscreen {
 }
 
 #remoteMuteIndicator {
-    left: 15px; /* Position des ersten Icons */
+    left: 15px;
 }
 
 #peerSelfMutedIndicator {
-    left: 55px; /* Position des zweiten Icons (15px + 32px + 8px Abstand) */
+    left: 55px;
 }
 
 #peerSelfMutedIndicator.active svg {
-    fill: #c13434; /* Rote Füllung für Peer-Aktion */
+    fill: #c13434;
 }
 
 .mute-indicator.active {
@@ -138,6 +138,27 @@ video:fullscreen {
     height: 100%;
     fill: #fff;
 }
+
+@keyframes self-muted-glow {
+    0% {
+        box-shadow: 0 0 4px rgba(76, 175, 80, 0.7), 0 0 8px rgba(76, 175, 80, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 12px rgba(88, 192, 92, 0.9), 0 0 20px rgba(88, 192, 92, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 4px rgba(76, 175, 80, 0.7), 0 0 8px rgba(76, 175, 80, 0.5);
+    }
+}
+
+#remoteMuteIndicator.active {
+    animation: self-muted-glow 1.8s ease-in-out infinite;
+}
+
+#peerSelfMutedIndicator.active {
+    animation: peer-muted-glow 1.8s ease-in-out infinite;
+}
+
 
 /* Floating Windows / Streams */
 #additionalStreamsContainer {
@@ -178,6 +199,11 @@ video:fullscreen {
 .floating-window-wrapper .mute-indicator {
     z-index: 1002;
 }
+
+.floating-window-wrapper .mute-indicator.active {
+    animation: self-muted-glow 1.8s ease-in-out infinite;
+}
+
 
 .floating-window-header {
     background-color: #333;
@@ -243,29 +269,28 @@ video:fullscreen {
 }
 
 .floating-window-wrapper .mute-indicator {
-    left: 15px; /* Standardposition für lokales Mute */
+    left: 15px;
     z-index: 1002;
 }
 
-/* --- KORRIGIERTER/NEUER CSS-BEREICH --- */
 .floating-window-wrapper .mute-indicator .icon-vol-on {
-    display: block; /* Standardmäßig ist Ton an */
+    display: block;
 }
 .floating-window-wrapper .mute-indicator .icon-vol-off {
     display: none;
 }
 .floating-window-wrapper .mute-indicator.muted .icon-vol-on {
-    display: none; /* Wenn gemutet, "Ton an" ausblenden */
+    display: none;
 }
 .floating-window-wrapper .mute-indicator.muted .icon-vol-off {
-    display: block; /* Wenn gemutet, "Ton aus" einblenden */
+    display: block;
 }
 
 .peer-muted-me-indicator {
     display: none;
     position: absolute;
     bottom: 15px;
-    left: 55px; /* Position neben dem lokalen Mute-Icon */
+    left: 55px;
     width: 32px;
     height: 32px;
     background-color: rgba(0, 0, 0, 0.5);
@@ -297,7 +322,6 @@ video:fullscreen {
         box-shadow: 0 0 4px rgba(193, 52, 52, 0.7), 0 0 8px rgba(193, 52, 52, 0.5);
     }
 }
-/* --- ENDE KORRIGIERTER BEREICH --- */
 
 
 /* Sidebar */
