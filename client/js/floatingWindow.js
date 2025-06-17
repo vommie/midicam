@@ -65,11 +65,21 @@ class FloatingWindow {
             this.video.srcObject = this.options.stream;
         }
 
+        this.placeholder = document.createElement('div');
+        this.placeholder.className = 'video-placeholder';
+        this.placeholder.innerHTML = `<div class="placeholder-avatar avatar-local">Me</div>`;
+
+        this.muteIndicator = document.createElement('div');
+        this.muteIndicator.className = 'mute-indicator';
+        this.muteIndicator.innerHTML = `<svg viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .58-.1 1.13-.27 1.64l1.27 1.27c.44-.88.7-1.87.7-2.91zM4.41 2.86L3 4.27l6 6V11c0 1.66 1.34 3 3 3 .23 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.55-.9L19.73 21l1.41-1.41L4.41 2.86zM10.17 11l-2-2H9v2h1.17zM15 11V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.17l4.73 4.73c.65-1.03 1.27-2.22 1.27-3.9z"/></svg>`;
+
         this.resizeHandle = document.createElement('div');
         this.resizeHandle.className = 'floating-window-resize-handle';
 
         this.wrapper.appendChild(header);
         this.wrapper.appendChild(this.video);
+        this.wrapper.appendChild(this.placeholder);
+        this.wrapper.appendChild(this.muteIndicator);
         this.wrapper.appendChild(this.resizeHandle);
 
         this.options.container.appendChild(this.wrapper);
@@ -193,6 +203,15 @@ class FloatingWindow {
             const closeEvent = new CustomEvent('close', { detail: { id: this.options.id } });
             this.wrapper.dispatchEvent(closeEvent);
         }
+    }
+
+    setPlaceholderActive(isActive) {
+        this.placeholder.classList.toggle('active', isActive);
+        this.video.style.display = isActive ? 'none' : 'block';
+    }
+
+    setMuteIndicatorActive(isActive) {
+        this.muteIndicator.classList.toggle('active', isActive);
     }
 }
 

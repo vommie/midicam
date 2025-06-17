@@ -16,8 +16,10 @@ class Metronome {
         this.scheduleAheadTime = 0.1;
         this.schedulerTimer = null;
 
-        this.gainNode = this.audioContext.createGain();
-        this.gainNode.connect(this.audioContext.destination);
+        if (this.audioContext) {
+            this.gainNode = this.audioContext.createGain();
+            this.gainNode.connect(this.audioContext.destination);
+        }
         this.lastVolume = 1;
 
         this.loadSound();
@@ -27,6 +29,7 @@ class Metronome {
     }
 
     async loadSound() {
+        if (!this.audioContext) return;
         try {
             const response = await fetch('assets/samples/metronome/01.wav');
             const arrayBuffer = await response.arrayBuffer();
@@ -37,7 +40,7 @@ class Metronome {
     }
 
     playSound(time) {
-        if (!this.soundBuffer || this.gainNode.gain.value === 0) return;
+        if (!this.soundBuffer || !this.gainNode || this.gainNode.gain.value === 0) return;
         const source = this.audioContext.createBufferSource();
         source.buffer = this.soundBuffer;
         source.connect(this.gainNode);
@@ -45,7 +48,7 @@ class Metronome {
     }
 
     scheduler() {
-        if (!this.isMaster || !this.isPlaying) return;
+        if (!this.isMaster || !this.isPlaying || !this.audioContext) return;
 
         while (this.nextBeatTime < this.audioContext.currentTime + this.scheduleAheadTime) {
             this.playSound(this.nextBeatTime);
@@ -65,7 +68,7 @@ class Metronome {
     }
 
     handleMasterTick(data) {
-        if (this.isMaster || !this.isPlaying) return;
+        if (this.isMaster || !this.isPlaying || !this.audioContext) return;
         const timeToNextBeat = data.nextBeatTime - data.masterAudioTimeNow;
         const scheduledTime = this.audioContext.currentTime + timeToNextBeat;
         this.playSound(scheduledTime);
@@ -73,11 +76,13 @@ class Metronome {
     }
 
     scheduleVisualUpdate(time, beatToVisualize) {
+        if (!this.audioContext) return;
         const scheduleTime = (time - this.audioContext.currentTime) * 1000;
         setTimeout(() => this.setBeatVisual(beatToVisualize), scheduleTime);
     }
 
     start() {
+        if (!this.audioContext) return;
         if (this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
@@ -286,6 +291,7 @@ class Metronome {
     }
 
     adjustVolume(save = true) {
+        if (!this.gainNode) return;
         const volume = parseFloat(this.elements.volumeSlider.value);
         this.gainNode.gain.value = volume;
         this.elements.volumeIcon.classList.toggle('muted', volume === 0);

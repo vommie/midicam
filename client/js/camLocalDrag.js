@@ -13,7 +13,7 @@ class CamLocalDrag {
 
         this.floatingWindow = new FloatingWindow({
             container: document.getElementById('additionalStreamsContainer'),
-            stream: this.localVideo.srcObject,
+            stream: null, // Initial stream is null, will be set from app.js
             title: 'My Camera',
             isClosable: false,
             initialWidth: savedSize.width,
@@ -22,8 +22,6 @@ class CamLocalDrag {
             initialTop: savedPosition.top,
             id: 'local-camera-window'
         });
-
-        this.localVideo.srcObject = this.floatingWindow.video.srcObject;
 
         this.floatingWindow.wrapper.addEventListener('mouseup', () => this.saveState());
         this.floatingWindow.wrapper.addEventListener('touchend', () => this.saveState());

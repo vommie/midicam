@@ -12,6 +12,8 @@ const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
+const remotePlaceholder = document.getElementById('remotePlaceholder');
+const remoteMuteIndicator = document.getElementById('remoteMuteIndicator');
 const videoSelect = document.getElementById('videoSelect');
 const audioSelect = document.getElementById('audioSelect');
 const micVolume = document.getElementById('micVolume');
@@ -50,6 +52,7 @@ const pianos = new Pianos();
 let metronome;
 let chat;
 let fileSharing;
+let camLocalDrag;
 const activeScreenShares = new Map();
 const pendingStreams = new Map();
 
@@ -111,17 +114,13 @@ async function populateDeviceOptions() {
             return `${type} ${index + 1}`;
         };
 
-        videoSelect.innerHTML = videoDevices.length > 0
-            ? videoDevices.map((device, index) =>
-                `<option value="${device.deviceId}">${createFallbackName('Camera', index, device)}</option>`
-            ).join('')
-            : '<option value="">No camera available</option>';
+        videoSelect.innerHTML = '<option value="">No camera</option>' + videoDevices.map((device, index) =>
+            `<option value="${device.deviceId}">${createFallbackName('Camera', index, device)}</option>`
+        ).join('');
 
-        audioSelect.innerHTML = audioDevices.length > 0
-            ? audioDevices.map((device, index) =>
-                `<option value="${device.deviceId}">${createFallbackName('Microphone', index, device)}</option>`
-            ).join('')
-            : '<option value="">No microphone available</option>';
+        audioSelect.innerHTML = '<option value="">No microphone</option>' + audioDevices.map((device, index) =>
+            `<option value="${device.deviceId}">${createFallbackName('Microphone', index, device)}</option>`
+        ).join('');
 
         const settings = loadSettings();
         if (settings && settings.videoDeviceId && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
@@ -212,25 +211,30 @@ async function populateMidiOptions() {
 
 async function startMedia() {
     try {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+        if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+        }
+
         const videoId = videoSelect.value;
         const audioId = audioSelect.value;
-        const videoConstraints = videoId ? {
-            deviceId: { exact: videoId },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-        } : true;
 
         const constraints = {
-            video: videoConstraints,
-            audio: audioId ? { deviceId: { exact: audioId } } : true
+            video: videoId ? { deviceId: { exact: videoId }, width: { ideal: 1920 }, height: { ideal: 1080 } } : false,
+            audio: audioId ? { deviceId: { exact: audioId } } : false
         };
 
-        if (!videoId) delete constraints.video.deviceId;
-        if (!audioId) delete constraints.audio.deviceId;
+        if (!constraints.video && !constraints.audio) {
+            localStream = new MediaStream();
+        } else {
+            logger.debug(`Starting media with constraints: ${JSON.stringify(constraints)}`);
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        }
 
-        logger.debug(`Starting media with constraints: ${JSON.stringify(constraints)}`);
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        localVideo.srcObject = localStream;
+        camLocalDrag.floatingWindow.setPlaceholderActive(!localStream.getVideoTracks().length > 0);
 
         if (localStream.getAudioTracks().length > 0) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -240,16 +244,23 @@ async function startMedia() {
             source.connect(gainNode);
             const destination = audioContext.createMediaStreamDestination();
             gainNode.connect(destination);
+
+            const newAudioTrack = destination.stream.getAudioTracks()[0];
             const videoTracks = localStream.getVideoTracks();
-            const audioTrack = destination.stream.getAudioTracks()[0];
-            localStream = new MediaStream([...videoTracks, audioTrack]);
-            localVideo.srcObject = localStream;
+
+            // Create a new stream with the processed audio and original video
+            localStream = new MediaStream([...videoTracks, newAudioTrack]);
+        } else {
+            gainNode = null;
         }
+
+        // **Fix:** Assign the final stream to the floating window's video element
+        camLocalDrag.floatingWindow.video.srcObject = localStream;
 
         currentVideoId = videoSelect.value;
         currentAudioId = audioSelect.value;
 
-        logger.info('Media stream started.');
+        logger.info('Media stream (re)started.');
         saveSettings();
         return true;
     } catch (err) {
@@ -267,42 +278,33 @@ async function startMedia() {
 async function switchMedia() {
     const newVideoId = videoSelect.value;
     const newAudioId = audioSelect.value;
-    const videoChanged = newVideoId !== currentVideoId;
-    const audioChanged = newAudioId !== currentAudioId;
 
-    if (!videoChanged && !audioChanged) {
+    if (newVideoId === currentVideoId && newAudioId === currentAudioId) {
         logger.debug('No media device change detected.');
         return;
     }
 
     try {
-        if (videoChanged || audioChanged) {
-            if (localStream) localStream.getTracks().forEach(track => track.stop());
-            if (audioContext) {
-                audioContext.close();
-                audioContext = null;
-            }
-            await startMedia();
-        }
+        await startMedia();
 
         if (pc) {
-            const senders = pc.getSenders();
-            const videoTrack = localStream.getVideoTracks()[0];
-            const audioTrack = localStream.getAudioTracks()[0];
-            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            const videoTrack = localStream.getVideoTracks()[0] || null;
+            const audioTrack = localStream.getAudioTracks()[0] || null;
 
-            if (videoSender && videoTrack) {
+            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            const audioSender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+
+            if (videoSender) {
                 await videoSender.replaceTrack(videoTrack);
+                logger.info(`Video track ${videoTrack ? 'replaced' : 'removed'}.`);
             }
-            if (audioSender && audioTrack) {
+            if (audioSender) {
                 await audioSender.replaceTrack(audioTrack);
+                logger.info(`Audio track ${audioTrack ? 'replaced' : 'removed'}.`);
             }
             updateVideoEncodingParameters(!!document.fullscreenElement);
         }
 
-        currentVideoId = newVideoId;
-        currentAudioId = newAudioId;
         logger.info('Media devices switched.');
         saveSettings();
     } catch (err) {
@@ -370,7 +372,7 @@ async function updateVideoEncodingParameters(fullscreen = false) {
 
     try {
         const videoSender = pc.getSenders().find(sender => sender.track && sender.track.kind === 'video');
-        if (!videoSender) return;
+        if (!videoSender || !videoSender.track) return;
 
         const parameters = videoSender.getParameters();
         if (!parameters.encodings || parameters.encodings.length === 0) {
@@ -433,11 +435,10 @@ async function startConnection() {
     });
     let pendingIceCandidates = [];
 
-    const trackPromises = localStream.getTracks().map(track => {
+    localStream.getTracks().forEach(track => {
         logger.debug(`Adding track: ${track.kind}`);
-        return pc.addTrack(track, localStream);
+        pc.addTrack(track, localStream);
     });
-    await Promise.all(trackPromises);
     logger.info('All local tracks added to peer connection.');
 
     const protocol = serverUrl.startsWith('https') ? 'wss' : 'ws';
@@ -599,6 +600,26 @@ async function startConnection() {
         } else if (remoteVideo.srcObject?.id !== streamId) {
             logger.info('Remote main stream received. Attaching to remoteVideo element.');
             remoteVideo.srcObject = stream;
+
+            if (stream.getVideoTracks().length > 0) {
+                remotePlaceholder.classList.remove('active');
+            } else {
+                remotePlaceholder.classList.add('active');
+            }
+
+            stream.onremovetrack = (e) => {
+                logger.info(`A remote track has been removed: ${e.track.kind}`);
+                if (e.track.kind === 'video' && stream.getVideoTracks().length === 0) {
+                    remotePlaceholder.classList.add('active');
+                }
+            };
+             stream.onaddtrack = (e) => {
+                logger.info(`A remote track has been added: ${e.track.kind}`);
+                if (e.track.kind === 'video' && stream.getVideoTracks().length > 0) {
+                    remotePlaceholder.classList.remove('active');
+                }
+            };
+
             remoteVideo.play().catch(err => logger.error(`Error playing remote video stream: ${err}`));
         }
     };
@@ -694,6 +715,10 @@ function disconnect() {
     }
     remoteVideo.srcObject = null;
     remoteVideo.load();
+    remotePlaceholder.classList.add('active');
+    remoteMuteIndicator.classList.remove('active');
+    camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
+
     logger.debug('remoteVideo element reset and loaded');
     if (audioContext) {
         audioContext.close();
@@ -968,6 +993,7 @@ function setEventListeners() {
         lastMicVolume = micVolume.value;
         const isMuted = parseFloat(micVolume.value) === 0;
         micVolumeIcon.classList.toggle('muted', isMuted);
+        camLocalDrag.floatingWindow.setMuteIndicatorActive(isMuted);
         micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
     remoteVolume.addEventListener('input', () => {
@@ -976,31 +1002,34 @@ function setEventListeners() {
         lastRemoteVolume = remoteVolume.value;
         const isMuted = parseFloat(remoteVolume.value) === 0;
         remoteVolumeIcon.classList.toggle('muted', isMuted);
+        remoteMuteIndicator.classList.toggle('active', isMuted);
         remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
 
     micVolumeIcon.addEventListener('click', () => {
-        if (parseFloat(micVolume.value) > 0) {
+        const isMuted = parseFloat(micVolume.value) > 0;
+        if (isMuted) {
             lastMicVolume = micVolume.value;
             micVolume.value = 0;
-            micVolumeIcon.classList.add('muted');
         } else {
             micVolume.value = lastMicVolume;
-            micVolumeIcon.classList.remove('muted');
         }
+        micVolumeIcon.classList.toggle('muted', isMuted);
+        camLocalDrag.floatingWindow.setMuteIndicatorActive(isMuted);
         adjustMicVolume();
         micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     });
 
     remoteVolumeIcon.addEventListener('click', () => {
-        if (parseFloat(remoteVolume.value) > 0) {
+        const isMuted = parseFloat(remoteVolume.value) > 0;
+        if (isMuted) {
             lastRemoteVolume = remoteVolume.value;
             remoteVolume.value = 0;
-            remoteVolumeIcon.classList.add('muted');
         } else {
             remoteVolume.value = lastRemoteVolume;
-            remoteVolumeIcon.classList.remove('muted');
         }
+        remoteVolumeIcon.classList.toggle('muted', isMuted);
+        remoteMuteIndicator.classList.toggle('active', isMuted);
         adjustRemoteVolume();
         remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
     });
@@ -1082,6 +1111,7 @@ function sendMidiMessage(midiData) {
 
 async function init() {
     new Sidebar();
+    camLocalDrag = new CamLocalDrag();
 
     await populateDeviceOptions();
     await populateMidiOptions();
@@ -1093,8 +1123,14 @@ async function init() {
 
     lastMicVolume = micVolume.value;
     lastRemoteVolume = remoteVolume.value;
-    micVolumeIcon.classList.toggle('muted', parseFloat(micVolume.value) === 0);
-    remoteVolumeIcon.classList.toggle('muted', parseFloat(remoteVolume.value) === 0);
+    const isMicMuted = parseFloat(micVolume.value) === 0;
+    const isRemoteMuted = parseFloat(remoteVolume.value) === 0;
+    micVolumeIcon.classList.toggle('muted', isMicMuted);
+    remoteVolumeIcon.classList.toggle('muted', isRemoteMuted);
+    camLocalDrag.floatingWindow.setMuteIndicatorActive(isMicMuted);
+    remoteMuteIndicator.classList.toggle('active', isRemoteMuted);
+
+    remotePlaceholder.classList.add('active');
 
     micVolume.style.setProperty('--p', `${micVolume.value * 100}%`);
     remoteVolume.style.setProperty('--p', `${remoteVolume.value * 100}%`);
@@ -1104,7 +1140,7 @@ async function init() {
 
     fileSharing = new FileSharing({
         container: '#filesharing-container',
-        logger: logger, // Logger-Instanz übergeben
+        logger: logger,
         onSendData: (data) => {
             if (fileChannel && fileChannel.readyState === 'open') {
                 fileChannel.send(data);
@@ -1136,7 +1172,7 @@ async function init() {
         'pedalSustain': true,
         'undampedStrings': ['G6', 'C8'],
         'sendMidiMessage': sendMidiMessage,
-        'logger': logger // Logger-Instanz übergeben
+        'logger': logger
     });
 
     metronome = new Metronome({
@@ -1150,7 +1186,6 @@ async function init() {
     });
     metronome.insertInto(metronomeContainer);
 
-    new CamLocalDrag();
     new MetronomeDrag();
     loadSettings();
 }
