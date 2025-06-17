@@ -36,7 +36,7 @@ let chatChannel;
 let metronomeChannel;
 let localStream;
 let audioContext;
-let gainNode;
+let gainNode = null;
 let currentVideoId = '';
 let currentAudioId = '';
 let midiAccess = null;
@@ -128,7 +128,7 @@ async function populateDeviceOptions() {
         } else {
             videoSelect.value = videoDevices[0]?.deviceId || '';
         }
-        if (settings && settings.audioDeviceId && audioDevices.some(d => d.deviceId === settings.audioDeviceId)) {
+        if (settings && settings.audioDeviceId && audioDevices.some(d => d.audioDeviceId === settings.audioDeviceId)) {
             audioSelect.value = settings.audioDeviceId;
         } else {
             audioSelect.value = audioDevices[0]?.deviceId || '';
@@ -210,9 +210,14 @@ async function populateMidiOptions() {
 }
 
 async function startMedia() {
+    logger.debug("--- startMedia called ---");
     try {
         if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
+            logger.debug(`Stopping all tracks from old localStream (ID: ${localStream.id})`);
+            localStream.getTracks().forEach(track => {
+                logger.debug(`Stopping track ID: ${track.id}, kind: ${track.kind}, state: ${track.readyState}`);
+                track.stop();
+            });
         }
 
         const videoId = videoSelect.value;
@@ -223,41 +228,59 @@ async function startMedia() {
             audio: audioId ? { deviceId: { exact: audioId } } : false
         };
 
+        let rawStream;
         if (!constraints.video && !constraints.audio) {
-            localStream = new MediaStream();
+            logger.debug("No video or audio device selected. Creating an empty stream.");
+            rawStream = new MediaStream();
         } else {
-            logger.debug(`Starting media with constraints: ${JSON.stringify(constraints)}`);
-            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            logger.debug(`Requesting new media with constraints: ${JSON.stringify(constraints)}`);
+            rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+            logger.debug(`Got new raw stream from getUserMedia. ID: ${rawStream.id}, Tracks: ${rawStream.getTracks().length}`);
         }
 
-        camLocalDrag.floatingWindow.setPlaceholderActive(!localStream.getVideoTracks().length > 0);
+        camLocalDrag.floatingWindow.setPlaceholderActive(!rawStream.getVideoTracks().length > 0);
 
-        if (localStream.getAudioTracks().length > 0) {
+        const videoTracks = rawStream.getVideoTracks();
+        let processedAudioTrack = null;
+
+        if (rawStream.getAudioTracks().length > 0) {
+            logger.debug("Audio track detected. Creating a fresh audio processing graph.");
             if (!audioContext) {
-                 logger.error("AudioContext is not available to process microphone.");
+                 logger.error("AudioContext is not available. Cannot process microphone.");
                  return false;
             }
-            const source = audioContext.createMediaStreamSource(localStream);
+
+            const source = audioContext.createMediaStreamSource(rawStream);
             gainNode = audioContext.createGain();
-            gainNode.gain.value = parseFloat(micVolume.value);
-            source.connect(gainNode);
             const destination = audioContext.createMediaStreamDestination();
+
+            source.connect(gainNode);
             gainNode.connect(destination);
+            logger.debug("New audio graph created: Source -> Gain -> Destination.");
 
-            const newAudioTrack = destination.stream.getAudioTracks()[0];
-            const videoTracks = localStream.getVideoTracks();
+            gainNode.gain.value = parseFloat(micVolume.value);
+            logger.debug(`Set gain on new gainNode to: ${micVolume.value}`);
 
-            localStream = new MediaStream([...videoTracks, newAudioTrack]);
+            processedAudioTrack = destination.stream.getAudioTracks()[0];
+            logger.debug(`Using processed audio track from NEW destination. Track ID: ${processedAudioTrack.id}, State: ${processedAudioTrack.readyState}`);
         } else {
+            logger.debug("No audio track in the new raw stream. Clearing gainNode.");
             gainNode = null;
         }
+
+        const allTracks = [...videoTracks];
+        if (processedAudioTrack) {
+            allTracks.push(processedAudioTrack);
+        }
+        localStream = new MediaStream(allTracks);
+        logger.debug(`Created final localStream ID: ${localStream.id} with ${localStream.getTracks().length} tracks.`);
 
         camLocalDrag.floatingWindow.video.srcObject = localStream;
 
         currentVideoId = videoSelect.value;
         currentAudioId = audioSelect.value;
 
-        logger.info('Media stream (re)started.');
+        logger.info('Media stream (re)started successfully.');
         saveSettings();
         return true;
     } catch (err) {
@@ -267,53 +290,119 @@ async function startMedia() {
             logger.error('Media Error: NotAllowedError - Access to camera/microphone denied.');
         } else {
             logger.error(`Media Error: ${err.message || err}`);
+            logger.debug(`Full error object: ${JSON.stringify(err)}`);
         }
         return false;
     }
 }
 
 async function switchMedia() {
+    logger.debug("--- switchMedia called ---");
     const newVideoId = videoSelect.value;
     const newAudioId = audioSelect.value;
 
     if (newVideoId === currentVideoId && newAudioId === currentAudioId) {
-        logger.debug('No media device change detected.');
+        logger.debug('No media device change detected. Aborting switch.');
         return;
     }
+    logger.info(`Switching media. Video: ${currentVideoId}->${newVideoId}, Audio: ${currentAudioId}->${newAudioId}`);
 
     try {
-        await startMedia();
+        const constraints = {
+            video: newVideoId ? { deviceId: { exact: newVideoId }, width: { ideal: 1920 }, height: { ideal: 1080 } } : false,
+            audio: newAudioId ? { deviceId: { exact: newAudioId } } : false
+        };
 
-        if (pc) {
-            const videoTrack = localStream.getVideoTracks()[0] || null;
-            const audioTrack = localStream.getAudioTracks()[0] || null;
+        let newRawStream;
+        if (!constraints.video && !constraints.audio) {
+            newRawStream = new MediaStream();
+        } else {
+            newRawStream = await navigator.mediaDevices.getUserMedia(constraints);
+        }
+        logger.debug(`Got new raw stream for switching. ID: ${newRawStream.id}`);
 
-            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            const audioSender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+        const oldTracks = localStream ? localStream.getTracks() : [];
 
-            if (videoSender) {
-                await videoSender.replaceTrack(videoTrack);
-                logger.info(`Video track ${videoTrack ? 'replaced' : 'removed'}.`);
-            }
-            if (audioSender) {
-                await audioSender.replaceTrack(audioTrack);
-                logger.info(`Audio track ${audioTrack ? 'replaced' : 'removed'}.`);
-            }
+        const newVideoTrack = newRawStream.getVideoTracks()[0] || null;
+        let newProcessedAudioTrack = null;
+
+        if (newRawStream.getAudioTracks().length > 0) {
+            logger.debug("New audio track detected. Creating a fresh audio processing graph.");
+            const source = audioContext.createMediaStreamSource(newRawStream);
+            gainNode = audioContext.createGain();
+            const destination = audioContext.createMediaStreamDestination();
+            source.connect(gainNode);
+            gainNode.connect(destination);
+            gainNode.gain.value = parseFloat(micVolume.value);
+            newProcessedAudioTrack = destination.stream.getAudioTracks()[0];
+            logger.debug(`Using new processed audio track. ID: ${newProcessedAudioTrack?.id}, State: ${newProcessedAudioTrack?.readyState}`);
+        } else {
+            logger.debug("No audio track in the new stream. Clearing gainNode.");
+            gainNode = null;
         }
 
-        logger.info('Media devices switched.');
+        if (pc) {
+            logger.debug("RTCPeerConnection exists. Updating tracks...");
+            const videoSender = pc.getSenders().find(s => s.kind === 'video');
+            if (videoSender) {
+                logger.debug(`Found video sender. Replacing track (Old: ${videoSender.track?.id}, New: ${newVideoTrack?.id})`);
+                await videoSender.replaceTrack(newVideoTrack);
+            } else if (newVideoTrack) {
+                logger.debug("No video sender found. Adding new video track.");
+                pc.addTrack(newVideoTrack, localStream);
+            }
+
+            const audioSender = pc.getSenders().find(s => s.kind === 'audio');
+            if (audioSender) {
+                logger.debug(`Found audio sender. Replacing track (Old: ${audioSender.track?.id}, New: ${newProcessedAudioTrack?.id})`);
+                await audioSender.replaceTrack(newProcessedAudioTrack);
+            } else if (newProcessedAudioTrack) {
+                logger.debug("No audio sender found, but we have a new live audio track. Adding it via addTrack().");
+                pc.addTrack(newProcessedAudioTrack, localStream);
+            }
+            logger.info(`Audio track update complete. New track is ${newProcessedAudioTrack ? 'active' : 'inactive'}.`);
+        } else {
+            logger.debug("No active RTCPeerConnection, no need to replace tracks.");
+        }
+
+        logger.debug(`Stopping ${oldTracks.length} old tracks.`);
+        oldTracks.forEach(track => {
+            logger.debug(`Stopping old track ID: ${track.id}, kind: ${track.kind}, state: ${track.readyState}`);
+            track.stop();
+        });
+
+        const finalTracks = [newVideoTrack, newProcessedAudioTrack].filter(Boolean);
+        localStream = new MediaStream(finalTracks);
+        logger.debug(`Created final localStream ID: ${localStream.id} with ${localStream.getTracks().length} tracks.`);
+
+        camLocalDrag.floatingWindow.video.srcObject = localStream;
+        camLocalDrag.floatingWindow.setPlaceholderActive(!newVideoTrack);
+
+        currentVideoId = newVideoId;
+        currentAudioId = newAudioId;
+
+        logger.info('Media devices switched successfully.');
         saveSettings();
+
     } catch (err) {
-        logger.error(`Error switching media devices: ${err}`);
+        logger.error(`Error switching media devices: ${err.message}`);
+        logger.debug(`Full error object during switchMedia: ${JSON.stringify(err)}`);
+        videoSelect.value = currentVideoId;
+        audioSelect.value = currentAudioId;
     }
 }
 
+
 function adjustMicVolume() {
-    if (gainNode) {
-        gainNode.gain.value = parseFloat(micVolume.value);
-        logger.debug(`Microphone volume set to ${micVolume.value}.`);
+    if (gainNode && audioContext) {
+        const newVolume = parseFloat(micVolume.value);
+        gainNode.gain.setValueAtTime(newVolume, audioContext.currentTime);
+        logger.debug(`Microphone volume set to ${newVolume}.`);
+    } else {
+        logger.debug("adjustMicVolume called, but gainNode is not available.");
     }
 }
+
 
 function adjustRemoteVolume() {
     remoteVideo.volume = parseFloat(remoteVolume.value);
@@ -432,7 +521,7 @@ async function startConnection() {
     let pendingIceCandidates = [];
 
     localStream.getTracks().forEach(track => {
-        logger.debug(`Adding track: ${track.kind}`);
+        logger.debug(`Adding track to PeerConnection: ${track.kind}, ID: ${track.id}`);
         pc.addTrack(track, localStream);
     });
     logger.info('All local tracks added to peer connection.');
@@ -689,6 +778,7 @@ async function startConnection() {
 }
 
 function disconnect() {
+    logger.debug("--- disconnect called ---");
     if (wsPingInterval) {
         clearInterval(wsPingInterval);
         wsPingInterval = null;
@@ -720,7 +810,6 @@ function disconnect() {
     camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
 
     logger.debug('remoteVideo element reset and loaded');
-    // We no longer close the audioContext here to keep the metronome alive.
     gainNode = null;
 
     if (midiAccess) {
@@ -1111,13 +1200,15 @@ async function init() {
     new Sidebar();
     camLocalDrag = new CamLocalDrag();
 
-    // Create the AudioContext once and for all.
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        logger.info("Global AudioContext created successfully.");
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+        logger.info(`Global AudioContext created successfully. State: ${audioContext.state}`);
+
     } catch(e) {
         logger.error("Could not create AudioContext. Metronome and audio processing will not work.");
-        // Fallback or disable UI elements if needed
     }
 
 
@@ -1126,7 +1217,7 @@ async function init() {
 
     const mediaReady = await startMedia();
     if (!mediaReady) {
-        logger.error('Media setup failed. Please check camera/microphone permissions and availability.');
+        logger.error('Initial media setup failed. Please check camera/microphone permissions and availability.');
     }
 
     lastMicVolume = micVolume.value;
@@ -1184,7 +1275,7 @@ async function init() {
     });
 
     metronome = new Metronome({
-        audioContext: audioContext, // Pass the single, persistent context
+        audioContext: audioContext,
         onStateChange: (state, isClaimingMaster) => {
             sendMetronomeState(isClaimingMaster);
         },
