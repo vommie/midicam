@@ -125,10 +125,6 @@ video:fullscreen {
     left: 55px;
 }
 
-#peerSelfMutedIndicator.active svg {
-    fill: #c13434;
-}
-
 .mute-indicator.active {
     display: block;
 }
