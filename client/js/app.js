@@ -214,10 +214,6 @@ async function startMedia() {
         if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
         }
-        if (audioContext) {
-            audioContext.close();
-            audioContext = null;
-        }
 
         const videoId = videoSelect.value;
         const audioId = audioSelect.value;
@@ -237,7 +233,10 @@ async function startMedia() {
         camLocalDrag.floatingWindow.setPlaceholderActive(!localStream.getVideoTracks().length > 0);
 
         if (localStream.getAudioTracks().length > 0) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioContext) {
+                 logger.error("AudioContext is not available to process microphone.");
+                 return false;
+            }
             const source = audioContext.createMediaStreamSource(localStream);
             gainNode = audioContext.createGain();
             gainNode.gain.value = parseFloat(micVolume.value);
@@ -721,12 +720,9 @@ function disconnect() {
     camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
 
     logger.debug('remoteVideo element reset and loaded');
-    if (audioContext) {
-        audioContext.close();
-        audioContext = null;
-        gainNode = null;
-        logger.debug('AudioContext closed.');
-    }
+    // We no longer close the audioContext here to keep the metronome alive.
+    gainNode = null;
+
     if (midiAccess) {
         const inputs = Array.from(midiAccess.inputs.values());
         inputs.forEach(input => input.onmidimessage = null);
@@ -1115,6 +1111,16 @@ async function init() {
     new Sidebar();
     camLocalDrag = new CamLocalDrag();
 
+    // Create the AudioContext once and for all.
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        logger.info("Global AudioContext created successfully.");
+    } catch(e) {
+        logger.error("Could not create AudioContext. Metronome and audio processing will not work.");
+        // Fallback or disable UI elements if needed
+    }
+
+
     await populateDeviceOptions();
     await populateMidiOptions();
 
@@ -1178,7 +1184,7 @@ async function init() {
     });
 
     metronome = new Metronome({
-        audioContext: audioContext,
+        audioContext: audioContext, // Pass the single, persistent context
         onStateChange: (state, isClaimingMaster) => {
             sendMetronomeState(isClaimingMaster);
         },

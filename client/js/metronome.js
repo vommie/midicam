@@ -40,7 +40,11 @@ class Metronome {
     }
 
     playSound(time) {
-        if (!this.soundBuffer || !this.gainNode || this.gainNode.gain.value === 0) return;
+        if (!this.soundBuffer || !this.gainNode || this.gainNode.gain.value === 0 || !this.audioContext) return;
+        if (this.audioContext.state === 'closed') {
+             console.error("Cannot play sound, AudioContext is closed.");
+             return;
+        }
         const source = this.audioContext.createBufferSource();
         source.buffer = this.soundBuffer;
         source.connect(this.gainNode);
@@ -241,55 +245,6 @@ class Metronome {
         });
     }
 
-    setState(state, isFromMasterClaim) {
-        if (isFromMasterClaim) {
-            this.setMaster(false);
-        }
-        if (this.elements.bpmInput.value != state.bpm) {
-            this.elements.bpmInput.value = state.bpm;
-            this.elements.bpmName.textContent = this.getTempoName(state.bpm);
-            localStorage.setItem('metronomeBpm', state.bpm);
-            this.adjustTempoNameFontSize();
-        }
-        if (this.elements.beatsInput.value != state.beats) {
-            this.elements.beatsInput.value = state.beats;
-            localStorage.setItem('metronomeBeats', state.beats);
-            this.updateBeatVisualsAmount(state.beats);
-        }
-        if (this.isPlaying !== state.isPlaying) {
-            if (state.isPlaying) {
-                this.start();
-            } else {
-                this.pause();
-            }
-        } else if (this.isPlaying && this.isMaster) {
-            this.pause();
-            this.start();
-        }
-    }
-
-    notifyStateChange(isClaimingMaster = false) {
-        this.onStateChange(this.getState(), isClaimingMaster);
-    }
-
-    updateBeatVisualsAmount(beats) {
-        if (this.elements.beatVisuals && this.elements.beatVisuals.length === beats) return;
-        let beatsHtml = '';
-        for (let i = 1; i <= beats; i++) {
-            beatsHtml = `${beatsHtml}<div class="beat-visual" data-id="${i}"></div>`;
-        }
-        this.elements.beatVisualsContainer.innerHTML = beatsHtml;
-        this.elements.beatVisuals = this.elements.beatVisualsContainer.querySelectorAll('.beat-visual');
-    }
-
-    getState() {
-        return {
-            bpm: parseInt(this.elements.bpmInput.value),
-            beats: parseInt(this.elements.beatsInput.value),
-            isPlaying: this.isPlaying,
-        };
-    }
-
     adjustVolume(save = true) {
         if (!this.gainNode) return;
         const volume = parseFloat(this.elements.volumeSlider.value);
@@ -337,7 +292,7 @@ class Metronome {
         const beatsChanged = this.elements.beatsInput.value != state.beats;
         if (beatsChanged) {
             this.elements.beatsInput.value = state.beats;
-            this.changeBeatVisualsAmount(state.beats);
+            this.updateBeatVisualsAmount(state.beats);
             localStorage.setItem('metronomeBeats', state.beats);
         }
 
@@ -351,7 +306,7 @@ class Metronome {
         this.onStateChange(this.getState(), isClaimingMaster);
     }
 
-    changeBeatVisualsAmount(beats) {
+    updateBeatVisualsAmount(beats) {
         if (this.elements.beatVisuals && this.elements.beatVisuals.length === beats) return;
         let beatsHtml = '';
         for (let i = 1; i <= beats; i++) {
