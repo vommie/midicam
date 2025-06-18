@@ -1190,6 +1190,12 @@ video:fullscreen {
     border-bottom: 1px solid #444;
 }
 
+.log-verbosity-label {
+    color: #ccc;
+    font-size: 0.9rem;
+    margin-left: 10px;
+}
+
 .log-search-input {
     flex-grow: 1;
     padding: 5px 8px;
@@ -1284,4 +1290,12 @@ video:fullscreen {
 
 .log-entry.error .level {
     color: #ff6b6b; /* Light Red */
+}
+
+.log-entry.warn {
+    background-color: rgba(220, 165, 30, 0.2);
+}
+
+.log-entry.warn .level {
+    color: #ffcc00; /* Amber */
 }

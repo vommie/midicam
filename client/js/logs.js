@@ -9,10 +9,12 @@ export class Log {
         this.searchInput = document.getElementById('log-search-input');
         this.levelFilter = document.getElementById('log-level-filter');
         this.exportButton = document.getElementById('log-export-btn');
+        this.verbositySelector = document.getElementById('log-verbosity-level');
 
         if (!this.toggleButton || !this.modalElement) {
             console.error('Log UI elements could not be created or found. Logging will be to console only.');
             this.info = console.info;
+            this.warn = console.warn;
             this.debug = console.log;
             this.error = console.error;
             return;
@@ -23,6 +25,10 @@ export class Log {
         this.currentSearchTerm = '';
         this.currentLevelFilter = 'all';
 
+        this.logLevels = { 'error': 4, 'warn': 3, 'info': 2, 'debug': 1 };
+        this.verbosityLevel = 'info'; // Default verbosity
+
+        this._loadSettings();
         this._initEventListeners();
     }
 
@@ -41,6 +47,14 @@ export class Log {
                         <select id="log-level-filter" class="log-level-filter">
                             <option value="all">All Levels</option>
                             <option value="error">Error</option>
+                            <option value="warn">Warn</option>
+                            <option value="info">Info</option>
+                            <option value="debug">Debug</option>
+                        </select>
+                        <label for="log-verbosity-level" class="log-verbosity-label">Log Level:</label>
+                        <select id="log-verbosity-level" class="log-level-filter">
+                            <option value="error">Error</option>
+                            <option value="warn">Warn</option>
                             <option value="info">Info</option>
                             <option value="debug">Debug</option>
                         </select>
@@ -72,7 +86,26 @@ export class Log {
             this._applyFilters();
         });
 
+        this.verbositySelector.addEventListener('change', () => {
+            this.verbosityLevel = this.verbositySelector.value;
+            this._saveSettings();
+        });
+
         this.exportButton.addEventListener('click', () => this._exportLogs());
+    }
+
+    _loadSettings() {
+        const settings = localStorage.getItem('log_settings');
+        if (settings) {
+            const parsed = JSON.parse(settings);
+            this.verbosityLevel = parsed.verbosity || 'info';
+        }
+        this.verbositySelector.value = this.verbosityLevel;
+    }
+
+    _saveSettings() {
+        const settings = { verbosity: this.verbosityLevel };
+        localStorage.setItem('log_settings', JSON.stringify(settings));
     }
 
     show() {
@@ -129,6 +162,10 @@ export class Log {
     }
 
     _add(level, message) {
+        if (this.logLevels[level] < this.logLevels[this.verbosityLevel]) {
+            return;
+        }
+
         if (!this.logContainer) {
             console[level === 'error' ? 'error' : 'log'](`[${level.toUpperCase()}] ${message}`);
             return;
@@ -167,6 +204,10 @@ export class Log {
 
     info(message) {
         this._add('info', message);
+    }
+
+    warn(message) {
+        this._add('warn', message);
     }
 
     debug(message) {
