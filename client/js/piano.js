@@ -30,7 +30,7 @@ class Pianos {
         };
         try {
             localStorage.setItem(this._getStorageKey(id), JSON.stringify(settingsToSave));
-            this.logger.info(`Piano ${id} settings saved to localStorage.`);
+            this.logger.debug(`Piano ${id} settings saved to localStorage.`);
         } catch (e) {
             this.logger.error(`Failed to save piano ${id} settings:`, e);
         }
@@ -487,7 +487,7 @@ class Piano {
     }
 
     updateSettings(newOpts) {
-        this.logger.info(`Updating piano ${this.id} settings dynamically.`);
+        this.logger.debug(`Updating piano ${this.id} settings dynamically.`);
         const oldOpts = { ...this.opts };
         this.opts = { ...this.opts, ...newOpts };
 
