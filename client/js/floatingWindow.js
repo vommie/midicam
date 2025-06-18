@@ -40,6 +40,10 @@ class FloatingWindow {
         this.wrapper.className = 'floating-window-wrapper';
         this.wrapper.id = this.options.id;
         this.wrapper.style.width = this.options.initialWidth + 'px';
+        // --- HINZUGEFÜGTE ZEILE ---
+        // Stellt sicher, dass die gespeicherte Höhe beim Laden der Seite angewendet wird.
+        this.wrapper.style.height = this.options.initialHeight + 'px';
+        // --- ENDE HINZUGEFÜGTE ZEILE ---
         this.wrapper.style.right = this.options.initialRight + 'px';
         this.wrapper.style.top = this.options.initialTop + 'px';
         this.wrapper.setAttribute('tabindex', '0');
@@ -69,11 +73,9 @@ class FloatingWindow {
         this.placeholder.className = 'video-placeholder';
         this.placeholder.innerHTML = `<div class="placeholder-avatar avatar-local">Me</div>`;
 
-        // --- KORRIGIERTER BEREICH START ---
         this.muteIndicator = document.createElement('div');
         this.muteIndicator.className = 'mute-indicator';
         this.muteIndicator.title = "You muted yourself";
-        // Zwei SVGs, wie in der Sidebar, für korrekte Anzeige
         this.muteIndicator.innerHTML = `
             <svg class="icon-vol-on" viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
             <svg class="icon-vol-off" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .58-.1 1.13-.27 1.64l1.27 1.27c.44-.88.7-1.87.7-2.91zM4.41 2.86L3 4.27l6 6V11c0 1.66 1.34 3 3 3 .23 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.55-.9L19.73 21l1.41-1.41L4.41 2.86zM10.17 11l-2-2H9v2h1.17zM15 11V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.17l4.73 4.73c.65-1.03 1.27-2.22 1.27-3.9z"/></svg>
@@ -83,7 +85,6 @@ class FloatingWindow {
         this.peerMutedMeIndicator.className = 'peer-muted-me-indicator';
         this.peerMutedMeIndicator.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`;
         this.peerMutedMeIndicator.title = "The peer muted you";
-        // --- KORRIGIERTER BEREICH ENDE ---
 
         this.resizeHandle = document.createElement('div');
         this.resizeHandle.className = 'floating-window-resize-handle';
@@ -99,7 +100,7 @@ class FloatingWindow {
     }
 
     updateSizeForAspectRatio() {
-        if (!this.video.videoWidth || !this.video.videoHeight) {
+        if (this.placeholder.classList.contains('active') || !this.video.videoWidth || !this.video.videoHeight) {
             return;
         }
 
@@ -167,7 +168,6 @@ class FloatingWindow {
         if (this.isResizing) {
             const widthChange = e.clientX - this.startX;
             const newWidth = this.startWidth + widthChange;
-
             const boundedWidth = Math.max(150, newWidth);
 
             this.wrapper.style.width = boundedWidth + 'px';
@@ -175,7 +175,13 @@ class FloatingWindow {
             const newRight = this.startRight - (boundedWidth - this.startWidth);
             this.wrapper.style.right = newRight + 'px';
 
-            this.updateSizeForAspectRatio();
+            if (this.placeholder.classList.contains('active')) {
+                const heightChange = e.clientY - this.startY;
+                const newHeight = this.startHeight + heightChange;
+                this.wrapper.style.height = Math.max(100, newHeight) + 'px';
+            } else {
+                this.updateSizeForAspectRatio();
+            }
         }
     }
 
@@ -223,9 +229,7 @@ class FloatingWindow {
         this.video.style.display = isActive ? 'none' : 'block';
     }
 
-    // --- KORRIGIERTE METHODEN ---
     setMuteIndicatorActive(isMuted) {
-        // Diese Methode steuert jetzt die .muted Klasse, die die SVGs umschaltet.
         this.muteIndicator.classList.toggle('active', isMuted);
         this.muteIndicator.classList.toggle('muted', isMuted);
     }
