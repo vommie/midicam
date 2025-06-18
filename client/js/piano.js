@@ -24,7 +24,8 @@ class Pianos {
             keyPressedLocalRGB: opts.keyPressedLocalRGB,
             keyPressedRemoteRGB: opts.keyPressedRemoteRGB,
             fromKey: opts.fromKey,
-            toKey: opts.toKey
+            toKey: opts.toKey,
+            height: opts.height
         };
         try {
             localStorage.setItem(this._getStorageKey(id), JSON.stringify(settingsToSave));
@@ -232,6 +233,11 @@ class Piano {
         this.elements.piano = this.insertPiano();
         this.elements.keys = [];
         this.elements.pedals = this.initPedalElements();
+
+        if (this.opts.height) {
+            this.elements.piano.container.style.height = `${this.opts.height}px`;
+        }
+
         this.createSettingsUI();
         this.updateDynamicStyles();
         this.setPedalButtonsVisibility();
@@ -239,6 +245,7 @@ class Piano {
         this.mouseIsDown = false;
         this.addMouseHandling();
         if(!opts.noScale === true) this.handleResize();
+        this.initResizing();
         this.sendMidiMessage = this.opts.sendMidiMessage || (() => {});
     }
 
@@ -259,6 +266,7 @@ class Piano {
         const piano = document.createElement('div');
         piano.classList.add('piano');
         piano.innerHTML = `
+        <div class="piano-resize-handle" title="Drag to resize piano height"></div>
         <div class="case">
             <div class="piano-settings-container"></div>
             <div class="pedals">
@@ -299,8 +307,47 @@ class Piano {
             container: piano,
             barWhite: piano.querySelector('.bar.white'),
             barBlack: piano.querySelector('.bar.black'),
-            case: piano.querySelector('.case')
+            case: piano.querySelector('.case'),
+            resizeHandle: piano.querySelector('.piano-resize-handle')
         };
+    }
+
+    initResizing() {
+        this.boundResize = this.resize.bind(this);
+        this.boundStopResize = this.stopResize.bind(this);
+
+        this.elements.piano.resizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            this.elements.piano.resizeHandle.classList.add('is-dragging');
+            document.addEventListener('mousemove', this.boundResize);
+            document.addEventListener('mouseup', this.boundStopResize);
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+        });
+    }
+
+    resize(e) {
+        const mainRect = this.elements.piano.container.parentElement.getBoundingClientRect();
+        const newHeight = mainRect.bottom - e.clientY;
+        const minHeight = 80;
+
+        requestAnimationFrame(() => {
+            this.elements.piano.container.style.height = `${Math.max(minHeight, newHeight)}px`;
+            this.resizePiano();
+        });
+    }
+
+    stopResize() {
+        document.removeEventListener('mousemove', this.boundResize);
+        document.removeEventListener('mouseup', this.boundStopResize);
+
+        this.elements.piano.resizeHandle.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        this.opts.height = this.elements.piano.container.offsetHeight;
+        this.manager.savePianoSettings(this.id, this.opts);
+        this.logger.info(`Piano height set to ${this.opts.height}px and saved.`);
     }
 
     insertKeys() {
@@ -675,7 +722,6 @@ class Piano {
         this.elements.piano.container.style.maxWidth = `${pianoRect.width}px`;
         this.elements.piano.barWhite.style.gridAutoColumns = `${keyWhiteWidth}px`;
         this.elements.piano.barBlack.style.gridAutoColumns = `${keyBlackWidth}px`;
-        this.elements.piano.container.style.height = `${keyWhiteWidth*5}px`;
 
         let keysWhite = this.elements.piano.container.querySelectorAll(`.bar.white .piano-key`);
         this.boxShadows.keyWhite = `inset 0px ${-4*factor}px ${1*factor}px rgba(0, 0, 0, .5)`;

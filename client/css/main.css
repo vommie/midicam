@@ -63,6 +63,7 @@ video:fullscreen {
 
 #piano {
     grid-area: p;
+    position: relative;
 }
 
 
@@ -377,12 +378,31 @@ video:fullscreen {
     transition: background-color 0.2s;
 }
 
-#sidebar-right #sidebar-resize-handle.is-dragging {
-    transition: none;
-    animation: sidebar-handle-pulse-glow 1.8s ease-in-out infinite;
+
+/* Piano Resize Handle */
+.piano .piano-resize-handle {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    cursor: row-resize;
+    z-index: 100;
+    transition: background-color 0.2s;
 }
 
-@keyframes sidebar-handle-pulse-glow {
+.piano .piano-resize-handle:hover {
+    background-color: rgba(40, 157, 25, 0.8);
+    transition: background-color 0.2s;
+}
+
+#sidebar-right #sidebar-resize-handle.is-dragging,
+.piano .piano-resize-handle.is-dragging {
+    transition: none;
+    animation: resize-handle-pulse-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes resize-handle-pulse-glow {
     0% {
         background-color: rgba(40, 157, 25, 0.7);
         box-shadow: 0 0 4px rgba(40, 157, 25, 0.5);
