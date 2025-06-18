@@ -386,12 +386,14 @@ class Piano {
                     <input type="color" id="remoteColor-${id}" value="${this.rgbToHex(this.opts.keyPressedRemoteRGB)}">
                 </div>
                 <div class="setting-item range-setting">
-                    <label>Key Range</label>
-                    <div class="dual-range-slider">
+                    <label for="fromKey-${id}">Key Range</label>
+                    <div class="dual-range-container">
+                        <div class="dual-range-slider">
+                            <input type="range" id="fromKey-${id}" min="1" max="88" value="${this.opts.fromKey}">
+                            <input type="range" id="toKey-${id}" min="1" max="88" value="${this.opts.toKey}">
+                            <div class="range-track"></div>
+                        </div>
                         <div class="range-values">${this.opts.fromKey} - ${this.opts.toKey}</div>
-                        <input type="range" id="fromKey-${id}" min="1" max="88" value="${this.opts.fromKey}">
-                        <input type="range" id="toKey-${id}" min="1" max="88" value="${this.opts.toKey}">
-                        <div class="range-track"></div>
                     </div>
                 </div>
             </div>
@@ -478,7 +480,10 @@ class Piano {
         const toSlider = document.getElementById(`toKey-${id}`);
         const fromVal = parseInt(fromSlider.value, 10);
         const toVal = parseInt(toSlider.value, 10);
-        const container = fromSlider.parentElement;
+
+        const container = fromSlider.closest('.dual-range-container');
+        if (!container) return;
+
         const rangeValues = container.querySelector('.range-values');
         const rangeTrack = container.querySelector('.range-track');
 

@@ -1,49 +1,54 @@
 .piano {
     position: relative;
-    background: #cccccc;
-    height: 100px;
+    background: #1a1a1a;
+    height: 120px;
     border-left: none;
     user-select: none;
     max-width: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .piano.inline {
-    display: inline-block;
+    display: inline-flex;
 }
 
 .case {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 15%;
-    background-color: rgb(0, 0, 0);
-    border-top: 2px solid rgb(100, 100, 100);
-    box-shadow: inset 0px -4px 12px rgba(255, 255, 255, 0.5);
-    padding: 0 10px;
+    height: 20%;
+    background-color: #373737;
+    border-top: 1px solid #444;
+    box-shadow: inset 0px 4px 15px rgba(0, 0, 0, 0.4), 0 2px 5px rgba(0,0,0,0.3);
+    padding: 0 20px;
+    z-index: 10;
 }
 
 .piano-settings-container {
-    flex-shrink: 0;
+    flex-grow: 1;
 }
 
 .piano-settings {
-    display: grid;
-    grid-auto-flow: column;
-    gap: 7px;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    font-size: 13px;
     color: #ddd;
 }
 
 .piano-settings .setting-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 2px;
+    gap: 8px;
 }
 
 .piano-settings label {
     white-space: nowrap;
+    font-weight: bold;
+    color: #bbb;
+    text-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
 
 .toggle-switch {
@@ -66,7 +71,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #555;
+    background-color: #333;
+    border: 1px solid #555;
     transition: .4s;
     border-radius: 20px;
 }
@@ -76,18 +82,20 @@
     content: "";
     height: 14px;
     width: 14px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
+    left: 2px;
+    bottom: 2px;
+    background-color: #999;
     transition: .4s;
     border-radius: 50%;
 }
 
 .toggle-switch input:checked + .slider {
     background-color: #4CAF50;
+    border-color: #58c05c;
 }
 
 .toggle-switch input:checked + .slider:before {
+    background-color: white;
     transform: translateX(20px);
 }
 
@@ -96,37 +104,58 @@
     -moz-appearance: none;
     appearance: none;
     width: 40px;
-    height: 20px;
+    height: 24px;
     background-color: transparent;
-    border: 1px solid #555;
-    border-radius: 4px;
+    border: 2px solid #555;
+    border-radius: 5px;
     cursor: pointer;
+    transition: border-color 0.3s;
+}
+.piano-settings input[type="color"]:hover {
+    border-color: #777;
 }
 .piano-settings input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
+    padding: 2px;
 }
 .piano-settings input[type="color"]::-webkit-color-swatch {
     border: none;
-    border-radius: 3px;
+    border-radius: 2px;
+}
+.piano-settings input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.setting-item.range-setting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dual-range-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .dual-range-slider {
     position: relative;
-    height: 30px;
+    width: 150px;
+    height: 20px;
     display: flex;
     align-items: center;
-    width: 100px;
-    margin-left: 6px;
 }
 
-.dual-range-slider .range-values {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    text-align: center;
-    font-size: 11px;
+.dual-range-slider .range-values, .dual-range-container .range-values {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: bold;
     color: #fff;
-    pointer-events: none;
+    background-color: #111;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    white-space: nowrap;
 }
 
 .dual-range-slider > input[type="range"] {
@@ -135,9 +164,8 @@
     appearance: none;
     position: absolute;
     width: 100%;
-    top: 17px;
-    height: 5px;
-    background: none;
+    height: 100%;
+    background: transparent;
     pointer-events: none;
     margin: 0;
     z-index: 3;
@@ -146,58 +174,92 @@
 .dual-range-slider > input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
-    background: #ccc;
+    width: 16px;
+    height: 16px;
+    background: #e0e0e0;
     border-radius: 50%;
+    border: 2px solid #1a1a1a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
     cursor: pointer;
     pointer-events: auto;
-    margin-top: -5px;
-    z-index: 2;
     position: relative;
+    z-index: 10;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .dual-range-slider > input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: #ccc;
+    width: 12px;
+    height: 12px;
+    background: #e0e0e0;
     border-radius: 50%;
+    border: 2px solid #1a1a1a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
     cursor: pointer;
     pointer-events: auto;
-    border: 0;
-    z-index: 2;
-    position: relative;
+    z-index: 10;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-.dual-range-slider > .range-track {
-    position: absolute;
-    height: 5px;
-    top: 15px;
-    background: #4CAF50;
-    border-radius: 5px;
-    z-index: 1;
+.dual-range-slider > input[type="range"]:hover::-webkit-slider-thumb {
+    background-color: #fff;
+}
+.dual-range-slider > input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.2);
+    background-color: #4CAF50;
+    box-shadow: 0 0 12px 2px rgba(76, 175, 80, 0.8);
+}
+.dual-range-slider > input[type="range"]:hover::-moz-range-thumb {
+    background-color: #fff;
+}
+.dual-range-slider > input[type="range"]:active::-moz-range-thumb {
+    transform: scale(1.2);
+    background-color: #4CAF50;
+    box-shadow: 0 0 12px 2px rgba(76, 175, 80, 0.8);
 }
 
 .dual-range-slider::before {
     content: '';
     position: absolute;
     width: 100%;
-    height: 5px;
-    top: 15px;
-    background: #555;
-    border-radius: 5px;
+    height: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #333;
+    border-radius: 4px;
+    z-index: 1;
+}
+
+.dual-range-slider > .range-track {
+    position: absolute;
+    height: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #4CAF50;
+    border-radius: 4px;
+    z-index: 2;
+    transition: left 0s, width 0s;
+}
+
+.dual-range-slider .range-values {
+    position: static;
+    transform: none;
+    top: auto;
+    left: auto;
+    pointer-events: auto;
 }
 
 .felt {
-    height: 2%;
-    background-color: rgb(184, 0, 0);
+    height: 3%;
+    background: linear-gradient(to bottom, #b80000, #8c0000);
+    box-shadow: inset 0 2px 3px rgba(0,0,0,0.4);
 }
 
 .bar {
     position: absolute;
-    height: 83%;
+    height: 77%;
     transform: translateX(0);
     transition: transform .05s linear 0s;
+    bottom: 0;
 }
 
 .bar.white {
@@ -220,10 +282,10 @@
     border-right: none;
     height: 100%;
     background: #ffffff;
-    border-bottom-left-radius: 3px; /* set by js */
-    border-bottom-right-radius: 3px; /* set by js */
-    box-shadow: inset 0px -4px 1px rgba(0, 0, 0, 0.5); /* set by js */
-    transition: box-shadow .2s;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+    box-shadow: inset 0px -4px 1px rgba(0, 0, 0, 0.5);
+    transition: box-shadow .2s, background-color 0.2s;
 }
 
 .bar.white .piano-key:hover ,
@@ -243,10 +305,10 @@
     pointer-events: initial;
     border: 2px solid black;
     border-top: none;
-    border-bottom-left-radius: 1px; /* set by js */
-    border-bottom-right-radius: 1px; /* set by js */
-    box-shadow: inset 0px -4px 1px rgba(255, 255, 255, .5); /* set by js */
-    transition: box-shadow .2s;
+    border-bottom-left-radius: 1px;
+    border-bottom-right-radius: 1px;
+    box-shadow: inset 0px -4px 1px rgba(255, 255, 255, .5);
+    transition: box-shadow .2s, background-color 0.2s;
     margin-top: 1px;
 }
 
@@ -270,41 +332,58 @@
     bottom: 0;
     left: 0;
     right: 0;
-    transition: box-shadow .2s;
+    transition: box-shadow .2s, background-color 0.2s;
 }
 
 .piano .pedals {
-    display: inline-grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-gap: 4px;
-    justify-items: center;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
     align-items: center;
-    margin-top: -2px;
 }
 
 .piano .pedals > div {
     position: relative;
-    height: 100%;
-    width: 56px;
+    width: 60px;
+    height: 24px;
 }
 
 .piano .pedals button {
-    display: block;
-    background-color: #ffffff;
-    color: #000000;
-    border: none;
-    text-transform: uppercase;
-    font-weight: 700;
-    transition: all .3s;
-    position: absolute;
+    appearance: none;
     width: 100%;
     height: 100%;
-    font-size: 1vw;
+    background: linear-gradient(to bottom, #3a3a3a, #2a2a2a);
+    color: #aaa;
+    border: 1px solid #111;
+    border-bottom: 3px solid #111;
+    border-radius: 5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .2s ease-out;
+    box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.1);
 }
 
-.piano .pedals button:hover {
-    background-color: #bbffbb;;
-    transition: all .3s;
+.piano .pedals button:hover:not(.active) {
+    background: linear-gradient(to bottom, #4f4f4f, #3a3a3a);
+    color: #fff;
+}
+
+.piano .pedals button.active {
+    background: var(--active-pedal-bg, linear-gradient(to bottom, #4CAF50, #3a9a3e));
+    color: #fff;
+    border-bottom-width: 1px;
+    box-shadow: 0 0 15px 3px var(--active-pedal-glow, #4CAF50), inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.piano .pedals button.active.local {
+    --active-pedal-bg: linear-gradient(to bottom, #4CAF50, #3a9a3e);
+    --active-pedal-glow: #4CAF50;
+}
+.piano .pedals button.active.remote {
+    --active-pedal-bg: linear-gradient(to bottom, #9D1919, #7a1515);
+    --active-pedal-glow: #9D1919;
 }
 
 .piano.soft .bar {
@@ -318,15 +397,17 @@
 
 .bar.white .piano-key.out-of-range,
 .bar.white .piano-key.out-of-range:hover {
-    background: #ccc !important;
+    background: #555 !important;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
 }
 
 .bar.black .piano-key.out-of-range,
 .bar.black .piano-key.out-of-range:hover {
-    background: #555 !important;
+    background: #333 !important;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
 }
 
-.piano-key.out-of-range.active,
+.piano-key.out-of-range.active .key-pressed,
 .piano-key.out-of-range .key-pressed {
     background: transparent !important;
     box-shadow: none !important;
