@@ -417,6 +417,7 @@ class Piano {
                         <input type="checkbox" id="sendMidi-${id}" ${this.opts.sendMidi ? 'checked' : ''}>
                         <span class="slider"></span>
                     </label>
+                    <div class="peer-status-led" id="peer-receive-status-led-${id}" title="Indicates if the peer has 'Receive MIDI' enabled. If red, your MIDI is not processed by the peer."></div>
                 </div>
                  <div class="setting-item">
                     <label for="receiveMidi-${id}">Receive MIDI</label>
@@ -424,6 +425,7 @@ class Piano {
                         <input type="checkbox" id="receiveMidi-${id}" ${this.opts.receiveMidi ? 'checked' : ''}>
                         <span class="slider"></span>
                     </label>
+                    <div class="peer-status-led" id="peer-send-status-led-${id}" title="Indicates if the peer has 'Send MIDI' enabled. If red, you will not receive MIDI from the peer."></div>
                 </div>
                 <div class="setting-item">
                     <label for="playMidiNotes-${id}">Play Notes</label>
@@ -500,6 +502,10 @@ class Piano {
         }
 
         this.manager.savePianoSettings(this.id, this.opts);
+
+        if (this.opts.onSettingsChange) {
+            this.opts.onSettingsChange(this.opts);
+        }
     }
 
     updateKeyRangeStyles() {
@@ -915,6 +921,32 @@ class Piano {
             }
         }
         return result;
+    }
+
+    updatePeerMidiStatus(status) {
+        const receiveLed = document.getElementById(`peer-receive-status-led-${this.id}`);
+        const sendLed = document.getElementById(`peer-send-status-led-${this.id}`);
+
+        if (!receiveLed || !sendLed) return;
+
+        if (status.canReceive) {
+            receiveLed.classList.remove('warning');
+        } else {
+            receiveLed.classList.add('warning');
+        }
+
+        if (status.isSending) {
+            sendLed.classList.remove('warning');
+        } else {
+            sendLed.classList.add('warning');
+        }
+    }
+
+    resetPeerMidiStatus() {
+        const receiveLed = document.getElementById(`peer-receive-status-led-${this.id}`);
+        const sendLed = document.getElementById(`peer-send-status-led-${this.id}`);
+        if (receiveLed) receiveLed.classList.remove('warning');
+        if (sendLed) sendLed.classList.remove('warning');
     }
 
 }

@@ -857,6 +857,10 @@ function disconnect() {
     peerSelfMutedIndicator.classList.remove('active');
     camLocalDrag.floatingWindow.setPeerMutedMeIndicatorActive(false);
 
+    if (pianos.pianos[0]) {
+        pianos.pianos[0].resetPeerMidiStatus();
+    }
+
     logger.debug('remoteVideo element reset and loaded');
     gainNode = null;
 
@@ -942,6 +946,7 @@ function setupCommonDataChannel(channel) {
         logger.info('Common data channel opened.');
         if(gainNode) sendSelfMuteStatus(isSelfMuted);
         else sendSelfMuteStatus(true);
+        sendMidiSettingsStatus();
     };
     channel.onmessage = (event) => {
         const msg = JSON.parse(event.data);
@@ -949,6 +954,16 @@ function setupCommonDataChannel(channel) {
             case 'self_mute_status':
                 logger.info(`Peer has ${msg.muted ? 'muted' : 'unmuted'} their microphone.`);
                 peerSelfMutedIndicator.classList.toggle('active', msg.muted);
+                break;
+            case 'midi_settings_status':
+                const peerSettings = msg.settings;
+                logger.info(`Peer MIDI settings received: Send=${peerSettings.send}, Receive=${peerSettings.receive}`);
+                if (pianos.pianos[0]) {
+                    pianos.pianos[0].updatePeerMidiStatus({
+                        canReceive: peerSettings.receive,
+                        isSending: peerSettings.send,
+                    });
+                }
                 break;
         }
     };
@@ -1292,6 +1307,21 @@ function sendMuteStatusUpdate(isMuted) {
     }
 }
 
+function sendMidiSettingsStatus() {
+    if (commonDataChannel && commonDataChannel.readyState === 'open' && pianos.pianos[0]) {
+        const pianoOpts = pianos.pianos[0].opts;
+        const payload = {
+            type: 'midi_settings_status',
+            settings: {
+                send: pianoOpts.sendMidi,
+                receive: pianoOpts.receiveMidi
+            }
+        };
+        commonDataChannel.send(JSON.stringify(payload));
+        logger.info(`Sent local MIDI settings status: Send=${payload.settings.send}, Receive=${payload.settings.receive}`);
+    }
+}
+
 function sendMidiMessage(midiData) {
     if (midiChannel && midiChannel.readyState === 'open') {
         if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
@@ -1382,7 +1412,8 @@ async function init() {
             'pedalSostenuto': true,
             'pedalSustain': true,
             'undampedStrings': ['G6', 'C8'],
-            'sendMidiMessage': sendMidiMessage
+            'sendMidiMessage': sendMidiMessage,
+            'onSettingsChange': () => sendMidiSettingsStatus()
         },
         logger
     );

@@ -412,3 +412,30 @@
     background: transparent !important;
     box-shadow: none !important;
 }
+
+.peer-status-led {
+    width: 4px;
+    height: 16px;
+    background-color: #444;
+    border: 1px solid #222;
+    border-radius: 2px;
+    margin-left: 8px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.peer-status-led.warning {
+    background-color: #D32F2F;
+    animation: led-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes led-pulse {
+    0% {
+        box-shadow: 0 0 2px rgba(211, 47, 47, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 8px 2px rgba(255, 82, 82, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 2px rgba(211, 47, 47, 0.5);
+    }
+}
