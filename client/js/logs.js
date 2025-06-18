@@ -1,3 +1,5 @@
+import { Dialog } from './dialog.js';
+
 export class Log {
     constructor(options) {
         this.toggleButton = document.querySelector(options.toggleButtonSelector);
@@ -87,8 +89,46 @@ export class Log {
         });
 
         this.verbositySelector.addEventListener('change', () => {
-            this.verbosityLevel = this.verbositySelector.value;
-            this._saveSettings();
+            const newLevel = this.verbositySelector.value;
+            const oldLevel = this.verbosityLevel;
+
+            if (newLevel === 'debug') {
+                new Dialog({
+                    title: 'Performance Warning',
+                    body: `
+                        <p>Enabling the "Debug" log level can generate a very high volume of log entries.</p>
+                        <p>This may negatively impact application performance, especially affecting real-time operations like MIDI processing, and could lead to high CPU usage.</p>
+                        <p><strong>Are you sure you want to proceed?</strong></p>
+                    `,
+                    width: '550px',
+                    buttons: [
+                        {
+                            text: 'Cancel',
+                            callback: (dialog) => {
+                                this.verbositySelector.value = oldLevel;
+                                dialog.close();
+                            }
+                        },
+                        {
+                            text: 'Proceed',
+                            className: 'danger',
+                            callback: (dialog) => {
+                                this.verbosityLevel = newLevel;
+                                this._saveSettings();
+                                dialog.close();
+                            }
+                        }
+                    ],
+                    onClose: (reason) => {
+                        if (this.verbositySelector.value === 'debug' && this.verbosityLevel !== 'debug') {
+                             this.verbositySelector.value = oldLevel;
+                        }
+                    }
+                }).show();
+            } else {
+                this.verbosityLevel = newLevel;
+                this._saveSettings();
+            }
         });
 
         this.exportButton.addEventListener('click', () => this._exportLogs());

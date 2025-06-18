@@ -7,6 +7,7 @@ import { Chat } from './chat.js';
 import { FileSharing } from './filesharing.js';
 import { Log } from './logs.js';
 import { Sidebar } from './sidebar.js';
+import { Dialog } from './dialog.js';
 
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
