@@ -19,7 +19,8 @@ class Pianos {
 
     savePianoSettings(id, opts) {
         const settingsToSave = {
-            enableMidi: opts.enableMidi,
+            sendMidi: opts.sendMidi,
+            receiveMidi: opts.receiveMidi,
             playMidiNotes: opts.playMidiNotes,
             keyPressedLocalRGB: opts.keyPressedLocalRGB,
             keyPressedRemoteRGB: opts.keyPressedRemoteRGB,
@@ -79,11 +80,11 @@ class Pianos {
                 if (velocity > 0) {
                     this.noteOn(note, velocity, src);
                 } else {
-                    this.noteOff(note);
+                    this.noteOff(note, src);
                 }
                 break;
             case 128: // noteOff
-                this.noteOff(note);
+                this.noteOff(note, src);
                 break;
             case 176: // CC command
                 if(note === 64) { // sustain pedal
@@ -106,10 +107,10 @@ class Pianos {
         });
     }
 
-    noteOff = (note) => {
+    noteOff = (note, src = 'local') => {
         this.logger.debug(`Note Off: ${note}`);
         this.pianos.forEach(piano => {
-            piano.handleNoteOff(note);
+            piano.handleNoteOff(note, src);
         });
     }
 
@@ -144,14 +145,14 @@ class Pianos {
 
         if(finalOpts.fromKey == undefined) finalOpts.fromKey = 1;
         if(finalOpts.toKey == undefined) finalOpts.toKey = 88;
-        if(finalOpts.enableMidi == undefined) finalOpts.enableMidi = true;
+        if(finalOpts.sendMidi == undefined) finalOpts.sendMidi = true;
+        if(finalOpts.receiveMidi == undefined) finalOpts.receiveMidi = true;
         if(finalOpts.playMidiNotes == undefined) finalOpts.playMidiNotes = false;
         if(!this.validateOptRGBArray(finalOpts.keyPressedLocalRGB)) finalOpts.keyPressedLocalRGB = [0, 255, 0];
         if(!this.validateOptRGBArray(finalOpts.keyPressedRemoteRGB)) finalOpts.keyPressedRemoteRGB = [255, 0, 0];
         if(finalOpts.pedalSoft == undefined) finalOpts.pedalSoft = true;
         if(finalOpts.pedalSostenuto == undefined) finalOpts.pedalSostenuto = true;
         if(finalOpts.pedalSustain == undefined) finalOpts.pedalSustain = true;
-        if(finalOpts.enableMidi) this.requestMidi();
         if(finalOpts.undampedStrings == undefined) finalOpts.undampedStrings = ['G6', 'C8'];
         else if(finalOpts.undampedStrings === false) finalOpts.undampedStrings = [];
 
@@ -411,9 +412,16 @@ class Piano {
         const settingsHTML = `
             <div class="piano-settings">
                 <div class="setting-item">
-                    <label for="enableMidi-${id}">Enable MIDI</label>
+                    <label for="sendMidi-${id}">Send MIDI</label>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="enableMidi-${id}" ${this.opts.enableMidi ? 'checked' : ''}>
+                        <input type="checkbox" id="sendMidi-${id}" ${this.opts.sendMidi ? 'checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                 <div class="setting-item">
+                    <label for="receiveMidi-${id}">Receive MIDI</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="receiveMidi-${id}" ${this.opts.receiveMidi ? 'checked' : ''}>
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -453,7 +461,8 @@ class Piano {
 
     addSettingsEventListeners() {
         const id = this.id;
-        document.getElementById(`enableMidi-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`sendMidi-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`receiveMidi-${id}`).addEventListener('change', this.handleSettingsChange);
         document.getElementById(`playMidiNotes-${id}`).addEventListener('change', this.handleSettingsChange);
         document.getElementById(`localColor-${id}`).addEventListener('input', this.handleSettingsChange);
         document.getElementById(`remoteColor-${id}`).addEventListener('input', this.handleSettingsChange);
@@ -466,7 +475,8 @@ class Piano {
     handleSettingsChange = () => {
         const id = this.id;
         const newOpts = {
-            enableMidi: document.getElementById(`enableMidi-${id}`).checked,
+            sendMidi: document.getElementById(`sendMidi-${id}`).checked,
+            receiveMidi: document.getElementById(`receiveMidi-${id}`).checked,
             playMidiNotes: document.getElementById(`playMidiNotes-${id}`).checked,
             keyPressedLocalRGB: this.hexToRgb(document.getElementById(`localColor-${id}`).value),
             keyPressedRemoteRGB: this.hexToRgb(document.getElementById(`remoteColor-${id}`).value),
@@ -623,31 +633,29 @@ class Piano {
     handleNoteOn(note, velocity, src) {
         const keyId = note - 20;
         if (!this.isKeyInRange(keyId)) return;
+        if (src === 'remote' && !this.opts.receiveMidi) return;
 
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
-            if (this.opts.enableMidi) {
-                this.addKeyPressedStyle(keyElement, velocity, src);
-                if (this.pressedKeys.indexOf(keyElement.dataset.id) === -1) {
-                    this.pressedKeys.push(keyElement.dataset.id);
-                }
+            this.addKeyPressedStyle(keyElement, velocity, src);
+            if (this.pressedKeys.indexOf(keyElement.dataset.id) === -1) {
+                this.pressedKeys.push(keyElement.dataset.id);
             }
             this.playNote(keyId, velocity);
         }
     }
 
-    handleNoteOff(note) {
+    handleNoteOff(note, src) {
         const keyId = note - 20;
         if (!this.isKeyInRange(keyId)) return;
+        if (src === 'remote' && !this.opts.receiveMidi) return;
 
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
-            if (this.opts.enableMidi) {
-                this.removeKeyPressedStyle(keyElement);
-                const index = this.pressedKeys.indexOf(keyElement.dataset.id);
-                if (index > -1) {
-                    this.pressedKeys.splice(index, 1);
-                }
+            this.removeKeyPressedStyle(keyElement);
+            const index = this.pressedKeys.indexOf(keyElement.dataset.id);
+            if (index > -1) {
+                this.pressedKeys.splice(index, 1);
             }
             if (this.opts.playMidiNotes) {
                 this.stopNote(keyElement.dataset.id);
@@ -663,7 +671,9 @@ class Piano {
         this.lastKeyId = id;
         this.addKeyPressedStyle(this.elements.keys[id]);
         this.playNote(id);
-        this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
+        if (this.opts.sendMidi) {
+            this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
+        }
     }
 
     onKeyRelease(e) {
@@ -673,7 +683,9 @@ class Piano {
 
         this.removeKeyPressedStyle(this.elements.keys[id]);
         this.stopNote(id);
-        this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
+        if (this.opts.sendMidi) {
+            this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
+        }
     }
 
     onMouseMove(e) {
@@ -683,10 +695,14 @@ class Piano {
         if (id == this.lastKeyId) return;
         this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
         this.stopNote(this.lastKeyId);
-        this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
+        if (this.opts.sendMidi) {
+            this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
+        }
         this.lastKeyId = id;
         this.playNote(id);
-        this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
+        if (this.opts.sendMidi) {
+            this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
+        }
         this.addKeyPressedStyle(this.elements.keys[id]);
     }
 
@@ -785,76 +801,66 @@ class Piano {
 
     softPedal(state, src='local') {
         if(!this.opts.pedalSoft) return;
-        const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
 
         let activate;
         if (src === 'local') {
             activate = !this.elements.pedals.soft.classList.contains('active');
-            this.sendMidiMessage(new Uint8Array([176, 67, activate ? 127 : 0]));
+            if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 67, activate ? 127 : 0]));
         } else {
+            if (!this.opts.receiveMidi) return;
             activate = state;
         }
 
         if(activate) {
-            this.elements.pedals.soft.classList.add('active');
-            this.elements.pedals.soft.style.background = `rgba(${rgb}, 1)`;
+            this.elements.pedals.soft.classList.add('active', src);
             this.elements.piano.container.classList.add('soft');
-        }
-        else {
-            this.elements.pedals.soft.classList.remove('active');
-            this.elements.pedals.soft.style.background = '';
+        } else {
+            this.elements.pedals.soft.classList.remove('active', 'local', 'remote');
             this.elements.piano.container.classList.remove('soft');
         }
     }
 
     sostenutoPedal(state, src='local') {
         if(!this.opts.pedalSostenuto) return;
-        const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
 
         let activate;
         if (src === 'local') {
             activate = !this.elements.pedals.sostenuto.classList.contains('active');
-            this.sendMidiMessage(new Uint8Array([176, 66, activate ? 127 : 0]));
-
+            if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 66, activate ? 127 : 0]));
         } else {
+            if (!this.opts.receiveMidi) return;
             activate = state;
         }
 
         if(activate) {
-            this.elements.pedals.sostenuto.classList.add('active');
-            this.elements.pedals.sostenuto.style.background = `rgba(${rgb}, 1)`;
-        }
-        else {
-            this.elements.pedals.sostenuto.classList.remove('active');
-            this.elements.pedals.sostenuto.style.background = '';
+            this.elements.pedals.sostenuto.classList.add('active', src);
+        } else {
+            this.elements.pedals.sostenuto.classList.remove('active', 'local', 'remote');
         }
     }
 
     sustainPedal(velocity, src='local') {
         if(!this.opts.pedalSustain) return;
-        const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
 
         let activate;
         if (src === 'local' && velocity === null) {
             activate = !this.elements.pedals.sustain.classList.contains('active');
-            this.sendMidiMessage(new Uint8Array([176, 64, activate ? 127 : 0]));
-
+            if (this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 64, activate ? 127 : 0]));
         } else {
+            if (src === 'remote' && !this.opts.receiveMidi) return;
             activate = velocity > 0;
         }
 
-        if(activate) {
-            const transparency = velocity ? this.scaleTransparency(velocity) : '1';
-            this.elements.pedals.sustain.classList.add('active');
-            this.elements.pedals.sustain.style.background = `rgba(${rgb}, ${transparency})`;
-        }
-        else {
-            this.elements.pedals.sustain.classList.remove('active');
-            this.elements.pedals.sustain.style.background = '';
-            this.sustainedKeyIds.forEach(id=>{
+        if (activate) {
+            this.elements.pedals.sustain.classList.add('active', src);
+        } else {
+            this.elements.pedals.sustain.classList.remove('active', 'local', 'remote');
+            this.sustainedKeyIds.forEach(id => {
                 if(this.pressedKeys.includes(id)) return;
                 this.stopNote(id);
-                this.sendMidiMessage(new Uint8Array([128, id, 0]));
+                if (this.opts.sendMidi && src === 'local') {
+                    this.sendMidiMessage(new Uint8Array([128, parseInt(id) + 20, 0]));
+                }
             });
             this.sustainedKeyIds = [];
         }

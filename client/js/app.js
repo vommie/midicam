@@ -446,15 +446,19 @@ async function connectMidi() {
                 selectedInput.onmidimessage = (message) => {
                     const midiData = new Uint8Array(message.data);
                     pianos.getMIDIMessage(message, 'local');
-                    if (midiChannel && midiChannel.readyState === 'open') {
-                        if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
-                            midiChannel.send(midiData.buffer);
-                            logger.debug(`Local MIDI message sent: [${midiData}]`);
+
+                    const pianoInstance = pianos.pianos[0];
+                    if (pianoInstance && pianoInstance.opts.sendMidi) {
+                        if (midiChannel && midiChannel.readyState === 'open') {
+                            if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
+                                midiChannel.send(midiData.buffer);
+                                logger.debug(`Local MIDI message sent: [${midiData}]`);
+                            } else {
+                                logger.debug(`MIDI message dropped due to high buffer: ${midiChannel.bufferedAmount} bytes.`);
+                            }
                         } else {
-                            logger.debug(`MIDI message dropped due to high buffer: ${midiChannel.bufferedAmount} bytes.`);
+                            logger.debug('MIDI data channel is not open.');
                         }
-                    } else {
-                        logger.debug('MIDI data channel is not open.');
                     }
                 };
                 logger.info(`MIDI input connected: ${selectedInput.name}.`);
@@ -891,16 +895,19 @@ function setupMidiChannel(channel) {
     channel.binaryType = 'arraybuffer';
     channel.onopen = () => logger.info('MIDI data channel opened.');
     channel.onmessage = (event) => {
-        const midiData = new Uint8Array(event.data);
-        logger.debug(`Remote MIDI message received: [${midiData}]`);
-        pianos.getMIDIMessage({ data: midiData }, 'remote');
-        if (midiAccess && midiOutputSelect.value) {
-            const selectedOutputId = midiOutputSelect.value;
-            const outputs = Array.from(midiAccess.outputs.values());
-            const selectedOutput = outputs.find(output => output.id === selectedOutputId);
-            if (selectedOutput) {
-                selectedOutput.send(midiData);
-                logger.debug(`Forwarded MIDI message to output: ${selectedOutput.name}.`);
+        const pianoInstance = pianos.pianos[0];
+        if (pianoInstance && pianoInstance.opts.receiveMidi) {
+            const midiData = new Uint8Array(event.data);
+            logger.debug(`Remote MIDI message received: [${midiData}]`);
+            pianos.getMIDIMessage({ data: midiData }, 'remote');
+            if (midiAccess && midiOutputSelect.value) {
+                const selectedOutputId = midiOutputSelect.value;
+                const outputs = Array.from(midiAccess.outputs.values());
+                const selectedOutput = outputs.find(output => output.id === selectedOutputId);
+                if (selectedOutput) {
+                    selectedOutput.send(midiData);
+                    logger.debug(`Forwarded MIDI message to output: ${selectedOutput.name}.`);
+                }
             }
         }
     };
@@ -1366,7 +1373,8 @@ async function init() {
     pianos.createPiano(
         {
             'selector': '#piano',
-            'enableMidi': true,
+            'sendMidi': true,
+            'receiveMidi': true,
             'playMidiNotes': false,
             'keyPressedLocalRGB': [0, 255, 0],
             'keyPressedRemoteRGB': [255, 0, 0],
