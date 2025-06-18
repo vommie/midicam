@@ -519,6 +519,15 @@ class Piano {
         }
 
         this.updateDualRangeSliderVisuals();
+
+        const currentFrom = parseInt(fromSlider.value, 10);
+        const currentTo = parseInt(toSlider.value, 10);
+
+        if (this.opts.fromKey !== currentFrom || this.opts.toKey !== currentTo) {
+            this.opts.fromKey = currentFrom;
+            this.opts.toKey = currentTo;
+            this.updateKeyRangeStyles();
+        }
     }
 
     updateDualRangeSliderVisuals = () => {
