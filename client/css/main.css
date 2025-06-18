@@ -254,8 +254,8 @@ video:fullscreen {
     opacity: 0.6;
     transition: opacity 0.2s ease-in-out;
     background-image:
-        linear-gradient(135deg, transparent 4px, #ccc 4px, #ccc 6px, transparent 6px),
-        linear-gradient(135deg, transparent 9px, #ccc 9px, #ccc 11px, transparent 11px);
+        linear-gradient(-45deg, transparent 4px, #ccc 4px, #ccc 6px, transparent 6px),
+        linear-gradient(-45deg, transparent 9px, #ccc 9px, #ccc 11px, transparent 11px);
     background-repeat: no-repeat;
     background-position: bottom right;
     z-index: 1002;
