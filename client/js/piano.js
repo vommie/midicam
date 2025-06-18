@@ -133,10 +133,8 @@ class Pianos {
         });
     }
 
-    createPiano(opts = {}) {
-        if (opts.logger) {
-            this.logger = opts.logger;
-        }
+    createPiano(opts = {}, logger = false) {
+        if(logger) this.logger = logger;
 
         const pianoId = this.pianos.length;
         const loadedOpts = this.loadPianoSettings(pianoId);
@@ -159,27 +157,6 @@ class Pianos {
         const piano = new Piano(pianoId, this.keys, finalOpts, this);
         this.pianos.push(piano);
     }
-
-    recreatePiano(id, newOpts) {
-        const oldPiano = this.pianos[id];
-        if (!oldPiano) return;
-
-        this.logger.info(`Recreating piano ${id} with new settings.`);
-
-        const finalOpts = { ...oldPiano.opts, ...newOpts };
-
-        this.savePianoSettings(id, finalOpts);
-
-        const container = document.querySelector(oldPiano.opts.selector);
-        if (container) {
-            const pianoElement = container.querySelector(`.piano[data-id='${id}']`);
-            if (pianoElement) pianoElement.remove();
-        }
-
-        const newPiano = new Piano(id, this.keys, finalOpts, this);
-        this.pianos[id] = newPiano;
-    }
-
 
     validateOptRGBArray(array) {
         if(array == undefined) return false;
@@ -236,19 +213,16 @@ class Piano {
     constructor(id, keys, opts = {}, manager) {
         this.id = id;
         this.keys = keys;
-        this.opts = opts;
         this.manager = manager;
-        this.logger = opts.logger || {
-            info: () => {},
-            debug: () => {},
-            error: console.error
-        };
+        this.logger = manager.logger;
+        this.opts = { ...opts };
+
         this.boxShadows = {};
         this.scaleFactor = 1;
         this.sustainedKeyIds = [];
         this.pressedKeys = [];
         this.soundPlayer = new SoundPlayer();
-        if(opts.undampedStrings.length > 1) this.opts.undampedStrings = this.getUndampedStringsRangeNotes(opts.undampedStrings[0], opts.undampedStrings[1]);
+        if(this.opts.undampedStrings.length > 1) this.opts.undampedStrings = this.getUndampedStringsRangeNotes(this.opts.undampedStrings[0], this.opts.undampedStrings[1]);
 
         this.logger.info(`Creating new Piano (ID: ${this.id})`);
         this.logger.debug(`Piano ${this.id} created with options: ${JSON.stringify(this.opts)}`);
@@ -265,7 +239,7 @@ class Piano {
         this.mouseIsDown = false;
         this.addMouseHandling();
         if(!opts.noScale === true) this.handleResize();
-        this.sendMidiMessage = opts.sendMidiMessage || (() => {});
+        this.sendMidiMessage = this.opts.sendMidiMessage || (() => {});
     }
 
     updateDynamicStyles() {
@@ -330,9 +304,7 @@ class Piano {
     }
 
     insertKeys() {
-        const fromKey = this.opts.fromKey;
-        const toKey = this.opts.toKey;
-        this.logger.info(`Piano ${this.id}: rendering all 88 keys, active range from ${fromKey} to ${toKey}`);
+        this.logger.info(`Piano ${this.id}: rendering keys, active range from ${this.opts.fromKey} to ${this.opts.toKey}`);
         for (let i = 1; i <= 88; i++) {
             if (this.keys[i] == undefined) return;
             this.insertKey(i, i === 1, i === 88);
@@ -434,8 +406,8 @@ class Piano {
         const id = this.id;
         document.getElementById(`enableMidi-${id}`).addEventListener('change', this.handleSettingsChange);
         document.getElementById(`playMidiNotes-${id}`).addEventListener('change', this.handleSettingsChange);
-        document.getElementById(`localColor-${id}`).addEventListener('change', this.handleSettingsChange);
-        document.getElementById(`remoteColor-${id}`).addEventListener('change', this.handleSettingsChange);
+        document.getElementById(`localColor-${id}`).addEventListener('input', this.handleSettingsChange);
+        document.getElementById(`remoteColor-${id}`).addEventListener('input', this.handleSettingsChange);
         document.getElementById(`fromKey-${id}`).addEventListener('input', this.handleRangeSliderInput);
         document.getElementById(`toKey-${id}`).addEventListener('input', this.handleRangeSliderInput);
         document.getElementById(`fromKey-${id}`).addEventListener('change', this.handleSettingsChange);
@@ -452,8 +424,40 @@ class Piano {
             fromKey: parseInt(document.getElementById(`fromKey-${id}`).value, 10),
             toKey: parseInt(document.getElementById(`toKey-${id}`).value, 10),
         };
-        this.manager.recreatePiano(this.id, newOpts);
+        this.updateSettings(newOpts);
     }
+
+    updateSettings(newOpts) {
+        this.logger.info(`Updating piano ${this.id} settings dynamically.`);
+        const oldOpts = { ...this.opts };
+        this.opts = { ...this.opts, ...newOpts };
+
+        if (JSON.stringify(oldOpts.keyPressedLocalRGB) !== JSON.stringify(this.opts.keyPressedLocalRGB)) {
+            this.updateDynamicStyles();
+        }
+
+        if (oldOpts.fromKey !== this.opts.fromKey || oldOpts.toKey !== this.opts.toKey) {
+            this.updateKeyRangeStyles();
+        }
+
+        this.manager.savePianoSettings(this.id, this.opts);
+    }
+
+    updateKeyRangeStyles() {
+        this.logger.debug(`Updating key range styles for piano ${this.id}: ${this.opts.fromKey}-${this.opts.toKey}`);
+        for (let i = 1; i <= 88; i++) {
+            const keyElement = this.elements.keys[i];
+            if (keyElement) {
+                if (this.isKeyInRange(i)) {
+                    keyElement.classList.remove('out-of-range');
+                } else {
+                    keyElement.classList.add('out-of-range');
+                    this.removeKeyPressedStyle(keyElement);
+                }
+            }
+        }
+    }
+
 
     handleRangeSliderInput = () => {
         const fromSlider = document.getElementById(`fromKey-${this.id}`);

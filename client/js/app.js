@@ -1362,19 +1362,21 @@ async function init() {
         }
     });
 
-    pianos.createPiano({
-        'selector': '#piano',
-        'enableMidi': true,
-        'playMidiNotes': false,
-        'keyPressedLocalRGB': [0, 255, 0],
-        'keyPressedRemoteRGB': [255, 0, 0],
-        'pedalSoft': true,
-        'pedalSostenuto': true,
-        'pedalSustain': true,
-        'undampedStrings': ['G6', 'C8'],
-        'sendMidiMessage': sendMidiMessage,
-        'logger': logger
-    });
+    pianos.createPiano(
+        {
+            'selector': '#piano',
+            'enableMidi': true,
+            'playMidiNotes': false,
+            'keyPressedLocalRGB': [0, 255, 0],
+            'keyPressedRemoteRGB': [255, 0, 0],
+            'pedalSoft': true,
+            'pedalSostenuto': true,
+            'pedalSustain': true,
+            'undampedStrings': ['G6', 'C8'],
+            'sendMidiMessage': sendMidiMessage
+        },
+        logger
+    );
 
     metronome = new Metronome({
         audioContext: audioContext,
