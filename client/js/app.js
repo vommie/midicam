@@ -1398,6 +1398,7 @@ async function init() {
     fileSharing = new FileSharing({
         container: '#filesharing-container',
         logger: logger,
+        notifier: notifier,
         onSendData: (data) => {
             if (fileChannel && fileChannel.readyState === 'open') {
                 fileChannel.send(data);

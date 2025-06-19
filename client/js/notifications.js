@@ -53,22 +53,31 @@ export class Notifications {
             notificationEl.innerHTML += `<div class="notification-separator"></div>`;
         }
 
-        let contentHTML = '<div class="notification-content">';
+        const contentEl = document.createElement('div');
+        contentEl.className = 'notification-content';
+
         if (options.title) {
-            contentHTML += `<div class="notification-title">${options.title}</div>`;
+            const titleEl = document.createElement('div');
+            titleEl.className = 'notification-title';
+            titleEl.textContent = options.title;
+            contentEl.appendChild(titleEl);
         }
+
         if (options.text) {
-             if (options.html) {
-                contentHTML += `<div class="notification-text">${options.text}</div>`;
+            const textContainer = document.createElement('div');
+            textContainer.className = 'notification-text';
+
+            if (options.text instanceof Node) {
+                textContainer.appendChild(options.text);
+            } else if (options.html) {
+                textContainer.innerHTML = options.text;
             } else {
-                const textEl = document.createElement('div');
-                textEl.className = 'notification-text';
-                textEl.textContent = options.text;
-                contentHTML += textEl.outerHTML;
+                textContainer.textContent = options.text;
             }
+            contentEl.appendChild(textContainer);
         }
-        contentHTML += '</div>';
-        notificationEl.innerHTML += contentHTML;
+
+        notificationEl.appendChild(contentEl);
 
         const closeBtn = document.createElement('button');
         closeBtn.className = 'notification-close-btn';
@@ -99,7 +108,8 @@ export class Notifications {
             this.notificationSound.play().catch(e => this.logger.error("Error playing notification sound:", e));
         }
 
-        this.logger.debug(`Notification shown: "${options.title || options.text.substring(0, 20)}"`);
+        const logText = typeof options.text === 'string' ? options.text.substring(0, 20) : '[DOM Element]';
+        this.logger.debug(`Notification shown: "${options.title || logText}"`);
     }
 
     _close(notificationEl) {

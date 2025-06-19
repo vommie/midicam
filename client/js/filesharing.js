@@ -1,3 +1,5 @@
+import { isElementVisible } from './helpers.js';
+
 const CHUNK_SIZE = 65536;
 
 export class FileSharing {
@@ -9,6 +11,7 @@ export class FileSharing {
         }
         this.onSendData = options.onSendData;
         this.logger = options.logger || { info: console.log, debug: console.log, error: console.error };
+        this.notifier = options.notifier;
 
         this.activeTransfers = new Map();
         this.isEnabled = false;
@@ -268,8 +271,8 @@ export class FileSharing {
 
         const fileType = transfer.file ? transfer.file.type : transfer.type;
 
-        actionLink.onclick = (e) => {
-            e.preventDefault();
+        const openOrDownload = (e) => {
+            if (e) e.preventDefault();
             const url = URL.createObjectURL(fileBlob);
             if (fileType.startsWith('image/') || fileType.startsWith('text/') || fileType === 'application/pdf' || fileType.startsWith('video/') || fileType.startsWith('audio/')) {
                  window.open(url, '_blank');
@@ -280,8 +283,37 @@ export class FileSharing {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
             }
         };
+
+        actionLink.onclick = openOrDownload;
+
+        const isReceived = !transfer.file;
+        if (isReceived && this.notifier && !isElementVisible(this.fileListEl)) {
+            const notificationText = document.createElement('div');
+            notificationText.innerHTML = `<strong>${fileName}</strong> (${this._formatBytes(fileBlob.size)})`;
+
+            const link = document.createElement('a');
+            link.href = "#";
+            link.textContent = "Open / Download";
+            link.style.display = 'block';
+            link.style.marginTop = '8px';
+            link.style.fontWeight = 'bold';
+            link.style.color = '#87ceeb';
+            link.onclick = openOrDownload;
+
+            notificationText.appendChild(link);
+
+            this.notifier.show({
+                position: 'nw',
+                icon: 'info',
+                title: 'File Received!',
+                text: notificationText,
+                duration: 15000,
+                showProgress: true
+            });
+        }
     }
 
     _getMimeIcon(fileNameOrType) {
