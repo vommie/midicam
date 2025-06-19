@@ -15,25 +15,25 @@
  * HOW TO ADD A NEW EFFECT:
  *
  * 1.  **File Structure:**
- *     Create a new folder for your effect inside `js/effects/`. The folder name should be
- *     a unique, simple identifier for your effect (e.g., `js/effects/fireworks/`).
+ *     Create a new folder for your effect inside `effects/`. The folder name should be
+ *     a unique, simple identifier for your effect (e.g., `effects/fireworks/`).
  *
  * 2.  **Effect Class File (Required):**
  *     Inside your new folder, create a file named `effect.js`. This file must export a
  *     default class that implements the specification described below.
- *     (e.g., `js/effects/fireworks/effect.js`)
+ *     (e.g., `effects/fireworks/effect.js`)
  *
  * 3.  **Effect-Specific CSS (Optional):**
  *     If your effect requires specific CSS, create a file named `effect.css` inside your
  *     effect's folder. The path must be specified in your effect class.
- *     (e.g., `js/effects/fireworks/effect.css`)
+ *     (e.g., `effects/fireworks/effect.css`)
  *
  * 4.  **Other Assets (Optional):**
  *     Place any other assets, like audio files (`.wav`, `.mp3`) or images, inside your
  *     effect's folder to keep it self-contained.
  *
  * 5.  **Registration:**
- *     Open `js/effects.js` and import your new effect class at the top. Then, add the
+ *     Open `effects.js` and import your new effect class at the top. Then, add the
  *     imported class to the `this.effectModules` array in the constructor.
  *
  * ------------------------------------------------------------------------------------------
@@ -62,7 +62,7 @@
  * @property {string} [cssPath]
  *   The relative path to the effect-specific CSS file. If provided, this CSS will be
  *   dynamically loaded when the effect starts and unloaded when it stops.
- *   Example: 'js/effects/fireworks/effect.css'
+ *   Example: 'effects/fireworks/effect.css'
  *
  * @property {number} [duration]
  *   The total duration of the effect in milliseconds. If provided, a progress bar
@@ -91,7 +91,7 @@
  *
  * ------------------------------------------------------------------------------------------
  *
- * MINIMAL EXAMPLE: `js/effects/my-effect/effect.js`
+ * MINIMAL EXAMPLE: `effects/my-effect/effect.js`
  *
  * export class MyEffect {
  *     constructor(options) {
@@ -144,8 +144,8 @@
  * ==========================================================================================
  */
 
-import { RainEffect } from './effects/rain/effect.js';
-import { TumbleweedEffect } from './effects/tumbleweed/effect.js';
+import { RainEffect } from '../effects/rain/rain.js';
+import { TumbleweedEffect } from '../effects/tumbleweed/tumbleweed.js';
 
 export class Effects {
     constructor(options) {

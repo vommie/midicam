@@ -3,8 +3,8 @@ export class TumbleweedEffect {
         this.logger = options.logger;
         this.id = 'tumbleweed';
         this.name = 'Tumbleweed';
-        this.icon = `<img src="js/effects/tumbleweed/cricket.svg" alt="Cricket Icon">`;
-        this.cssPath = 'js/effects/tumbleweed/effect.css';
+        this.icon = `<img src="effects/tumbleweed/cricket.svg" alt="Cricket Icon">`;
+        this.cssPath = 'effects/tumbleweed/tumbleweed.css';
         this.duration = 6000;
 
         this.onFinish = null;
@@ -83,7 +83,7 @@ export class TumbleweedEffect {
         }
 
         try {
-            this.audio = new Audio('js/effects/tumbleweed/cricket.aac');
+            this.audio = new Audio('effects/tumbleweed/cricket.aac');
             this.audio.loop = true;
             this.audio.volume = 0;
             this.audio.play().catch(e => this.logger.warn(`Audio playback failed: ${e.message}.`));
@@ -94,7 +94,7 @@ export class TumbleweedEffect {
         const tumbleweedEl = document.createElement('div');
         tumbleweedEl.className = 'tumbleweed';
         const tumbleweedImage = document.createElement('img');
-        tumbleweedImage.src = 'js/effects/tumbleweed/tumbleweed.png';
+        tumbleweedImage.src = 'effects/tumbleweed/tumbleweed.png';
         tumbleweedImage.alt = 'A rolling tumbleweed';
         tumbleweedEl.appendChild(tumbleweedImage);
         this.container.appendChild(tumbleweedEl);
