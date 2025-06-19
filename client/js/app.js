@@ -826,16 +826,31 @@ async function startConnection() {
     saveSettings();
 }
 
-function disconnect() {
-    logger.debug("--- disconnect called ---");
+function disconnect(isIntentional = false) {
+    logger.debug(`--- disconnect called (isIntentional: ${isIntentional}) ---`);
+
+    if (!isIntentional && notifier) {
+        notifier.show({
+            position: 'nw',
+            icon: 'error',
+            title: 'Connection Lost',
+            text: 'The connection was unexpectedly interrupted. Please try to reconnect.',
+            duration: 15000,
+            showProgress: true,
+            sound: true
+        });
+    }
+
     if (wsPingInterval) {
         clearInterval(wsPingInterval);
         wsPingInterval = null;
     }
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'disconnect' }));
-        logger.info('Disconnect message sent.');
+        if (isIntentional) {
+            ws.send(JSON.stringify({ type: 'disconnect' }));
+            logger.info('Disconnect message sent.');
+        }
     }
     for (const streamId of activeScreenShares.keys()) {
         stopScreenShare(streamId, true);
@@ -1228,7 +1243,7 @@ function setEventListeners() {
 
     startConnectionButton.addEventListener('click', () => {
         if (startConnectionButton.innerHTML.includes('Disconnect')) {
-            disconnect();
+            disconnect(true);
         } else {
             startConnection();
         }
