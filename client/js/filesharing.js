@@ -16,7 +16,7 @@ export class FileSharing {
         this.channel = null;
 
         this.sentSound = new Audio('assets/file_sent.wav');
-        this.receiveSound = new Audio('assets/file_receive.wav');
+        this.receiveSound = new Audio('assets/notification.wav');
 
         this._setupUI();
         this._setupEventListeners();

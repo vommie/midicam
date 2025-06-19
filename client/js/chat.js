@@ -11,7 +11,7 @@ export class Chat {
         this.sendButton = this.container.querySelector('.chat-send-button');
 
         this.sentSound = new Audio('assets/file_sent.wav');
-        this.receiveSound = new Audio('assets/file_receive.wav');
+        this.receiveSound = new Audio('assets/notification.wav');
 
         this.init();
     }
