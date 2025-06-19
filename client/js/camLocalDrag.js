@@ -13,7 +13,7 @@ class CamLocalDrag {
 
         this.floatingWindow = new FloatingWindow({
             container: document.getElementById('additionalStreamsContainer'),
-            stream: null, // Initial stream is null, will be set from app.js
+            stream: null,
             title: 'My Camera',
             isClosable: false,
             initialWidth: savedSize.width,

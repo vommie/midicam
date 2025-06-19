@@ -28,7 +28,7 @@ export class Log {
         this.currentLevelFilter = 'all';
 
         this.logLevels = { 'error': 4, 'warn': 3, 'info': 2, 'debug': 1 };
-        this.verbosityLevel = 'info'; // Default verbosity
+        this.verbosityLevel = 'info';
 
         this._loadSettings();
         this._initEventListeners();

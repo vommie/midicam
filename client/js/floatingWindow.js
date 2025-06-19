@@ -40,10 +40,7 @@ class FloatingWindow {
         this.wrapper.className = 'floating-window-wrapper';
         this.wrapper.id = this.options.id;
         this.wrapper.style.width = this.options.initialWidth + 'px';
-        // --- HINZUGEFÜGTE ZEILE ---
-        // Stellt sicher, dass die gespeicherte Höhe beim Laden der Seite angewendet wird.
         this.wrapper.style.height = this.options.initialHeight + 'px';
-        // --- ENDE HINZUGEFÜGTE ZEILE ---
         this.wrapper.style.right = this.options.initialRight + 'px';
         this.wrapper.style.top = this.options.initialTop + 'px';
         this.wrapper.setAttribute('tabindex', '0');

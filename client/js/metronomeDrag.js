@@ -1,5 +1,3 @@
-// js/metronomeDrag.js
-
 class MetronomeDrag {
     constructor() {
         this.metronomeContainer = document.getElementById('metronomeContainer');
