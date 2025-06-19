@@ -1,14 +1,11 @@
 .tumbleweed {
     position: absolute;
-    bottom: 5vh;
-    left: 0;
     bottom: 0;
     width: 200px;
     height: 200px;
     animation: tumbleweed-journey 6s linear forwards;
-    pointer-events: auto;
+    pointer-events: none;
     opacity: 1;
-    transition: opacity 0.5s ease-out;
     transform: translateX(-10vw) translateY(0);
 }
 
@@ -29,12 +26,4 @@
 @keyframes tumbleweed-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-}
-
-main.sepia-filter-active {
-    filter: sepia(0.7) url(#heat-shimmer);
-}
-
-main {
-    transition: filter 1s ease-in-out;
 }
