@@ -32,7 +32,7 @@
 }
 
 main.sepia-filter-active {
-    filter: sepia(0.7);
+    filter: sepia(0.7) url(#heat-shimmer);
 }
 
 main {

@@ -12,12 +12,54 @@ export class TumbleweedEffect {
         this.audio = null;
         this.mainTimer = null;
         this.mainElement = document.querySelector('main');
+        this.filterId = 'tumbleweed-heat-shimmer-svg';
+    }
+
+    _createHeatShimmerFilter() {
+        const existingFilter = document.getElementById(this.filterId);
+        if (existingFilter) return;
+
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute('id', this.filterId);
+        svg.style.position = 'absolute';
+        svg.style.width = '0';
+        svg.style.height = '0';
+
+        const filter = document.createElementNS(svgNS, "filter");
+        filter.setAttribute("id", "heat-shimmer");
+
+        const feTurbulence = document.createElementNS(svgNS, "feTurbulence");
+        feTurbulence.setAttribute("type", "fractalNoise");
+        feTurbulence.setAttribute("baseFrequency", "0.01 0.04");
+        feTurbulence.setAttribute("numOctaves", "2");
+
+        const animate = document.createElementNS(svgNS, "animate");
+        animate.setAttribute("attributeName", "baseFrequency");
+        animate.setAttribute("dur", "10s");
+        animate.setAttribute("values", "0.01 0.04;0.015 0.06;0.01 0.04");
+        animate.setAttribute("repeatCount", "indefinite");
+        feTurbulence.appendChild(animate);
+
+        const feDisplacementMap = document.createElementNS(svgNS, "feDisplacementMap");
+        feDisplacementMap.setAttribute("in", "SourceGraphic");
+        feDisplacementMap.setAttribute("in2", "turbulence");
+        feDisplacementMap.setAttribute("scale", "5");
+        feDisplacementMap.setAttribute("xChannelSelector", "R");
+        feDisplacementMap.setAttribute("yChannelSelector", "G");
+
+        filter.appendChild(feTurbulence);
+        filter.appendChild(feDisplacementMap);
+        svg.appendChild(filter);
+        document.body.appendChild(svg);
     }
 
     start(container, onFinishCallback) {
         this.logger.info(`Starting ${this.name} effect.`);
         this.container = container;
         this.onFinish = onFinishCallback;
+
+        this._createHeatShimmerFilter();
 
         if (this.mainElement) {
             this.mainElement.classList.add('sepia-filter-active');
@@ -65,6 +107,11 @@ export class TumbleweedEffect {
         const cleanupDelay = 1000;
 
         setTimeout(() => {
+            const svgFilter = document.getElementById(this.filterId);
+            if (svgFilter) {
+                svgFilter.remove();
+            }
+
             if (this.audio) {
                 this.audio.pause();
                 this.audio.src = '';
