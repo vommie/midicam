@@ -9,6 +9,7 @@ import { Log } from './logs.js';
 import { Sidebar } from './sidebar.js';
 import { Dialog } from './dialog.js';
 import { Notifications } from './notifications.js';
+import { Effects } from './effects.js';
 
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
@@ -58,6 +59,7 @@ let chat;
 let notifier;
 let fileSharing;
 let camLocalDrag;
+let effects;
 const activeScreenShares = new Map();
 const pendingStreams = new Map();
 
@@ -982,6 +984,11 @@ function setupCommonDataChannel(channel) {
                     });
                 }
                 break;
+            case 'effect_control':
+                if (effects) {
+                    effects.handleRemoteMessage(msg.payload);
+                }
+                break;
         }
     };
     channel.onerror = (err) => logger.error(`Common data channel error: ${err.message || err}`);
@@ -1356,6 +1363,18 @@ async function init() {
     new Sidebar();
     notifier = new Notifications({ logger });
     camLocalDrag = new CamLocalDrag();
+    effects = new Effects({
+        logger,
+        onSendMessage: (payload) => {
+            if (commonDataChannel && commonDataChannel.readyState === 'open') {
+                const message = {
+                    type: 'effect_control',
+                    payload: payload
+                };
+                commonDataChannel.send(JSON.stringify(message));
+            }
+        }
+    });
 
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
