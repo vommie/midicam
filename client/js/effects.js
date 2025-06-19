@@ -145,13 +145,14 @@
  */
 
 import { RainEffect } from './effects/rain/effect.js';
+import { TumbleweedEffect } from './effects/tumbleweed/effect.js';
 
 export class Effects {
     constructor(options) {
         this.logger = options.logger;
         this.onSendMessage = options.onSendMessage;
         this.container = document.getElementById('effects-grid');
-        this.effectModules = [RainEffect];
+        this.effectModules = [RainEffect, TumbleweedEffect];
         this.effects = new Map();
         this.activeEffect = null;
         this.effectButtons = new Map();

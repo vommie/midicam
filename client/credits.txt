@@ -3,4 +3,9 @@ file_error.wav: https://freesound.org/people/tcpp/sounds/151309/
 file icons: https://www.svgrepo.com/collection/doodle-icons/
 favicon: https://www.svgrepo.com/svg/513232/piano
 volume_locale.svg / volume_remote.svg / volume_metronome.svg: https://www.svgrepo.com/svg/535722/volume-high
+
+Effects:
 rain.wav: https://pixabay.com/users/juliush-3921568/
+cricket.svg: https://www.svgrepo.com/svg/405147/cricket
+tumbleweed.png: Inkong Boutchalern | https://www.vecteezy.com/png/58271526-intricate-tangled-nest-like-wooden-ball-sculpture-with-natural-textures-and-patterns
+cricket.aac: https://pixabay.com/users/emircanalp-17632163/

@@ -1,0 +1,40 @@
+.tumbleweed {
+    position: absolute;
+    bottom: 5vh;
+    left: 0;
+    bottom: 0;
+    width: 200px;
+    height: 200px;
+    animation: tumbleweed-journey 6s linear forwards;
+    pointer-events: auto;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+    transform: translateX(-10vw) translateY(0);
+}
+
+.tumbleweed img {
+    width: 100%;
+    height: 100%;
+    animation: tumbleweed-spin 1.2s linear infinite;
+}
+
+@keyframes tumbleweed-journey {
+    0% { transform: translateX(-10vw) translateY(0); }
+    25% { transform: translateX(25vw) translateY(-40px); }
+    50% { transform: translateX(50vw) translateY(0); }
+    75% { transform: translateX(75vw) translateY(-25px); }
+    100% { transform: translateX(110vw) translateY(0); }
+}
+
+@keyframes tumbleweed-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+main.sepia-filter-active {
+    filter: sepia(0.7);
+}
+
+main {
+    transition: filter 1s ease-in-out;
+}
