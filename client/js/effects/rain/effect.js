@@ -22,16 +22,26 @@ export class RainEffect {
     start(container, onFinishCallback) {
         this.container = container;
         this.onFinish = onFinishCallback;
+
+        this.container.style.transition = 'opacity 2s ease-in-out';
+        this.container.style.opacity = '0';
+
+        requestAnimationFrame(() => {
+            if (this.container) {
+                this.container.style.opacity = '1';
+            }
+        });
+
         this.container.classList.add('rain-effect');
 
         try {
             this.audio = new Audio('js/effects/rain/rain.aac');
             this.audio.loop = true;
             this.audio.volume = 0;
-            this.audio.play().catch(e => this.logger.warn(`Audio playback failed: ${e.message}. Did you add the rain.wav file?`));
-            this._fadeAudio(0.5, 1000);
+            this.audio.play().catch(e => this.logger.warn(`Audio playback failed: ${e.message}.`));
+            this._fadeAudio(0.5, 2000);
         } catch (e) {
-             this.logger.error(`Could not create Audio object: ${e}. The sound file might be missing.`);
+             this.logger.error(`Could not create Audio object: ${e}.`);
         }
 
         this.canvas = document.createElement('canvas');
@@ -55,8 +65,11 @@ export class RainEffect {
         this.animate();
 
         this.mainTimer = setTimeout(() => this.stop(), this.duration);
+
         this.fadeTimer = setTimeout(() => {
-            if (this.container) this.container.style.opacity = '0';
+            if (this.container) {
+                this.container.style.opacity = '0';
+            }
             this._fadeAudio(0, 1800);
         }, this.duration - 2000);
     }
