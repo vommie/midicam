@@ -1,11 +1,9 @@
-/* --- Rain Effect Container --- */
 #effect-main-container {
-    /* FIX: position: fixed nimmt das Element aus dem Flow und bezieht es auf den Viewport */
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw; /* viewport width */
-    height: 100vh; /* viewport height */
+    width: 100vw;
+    height: 100vh;
     z-index: 5000;
     pointer-events: none;
     transition: opacity 2s ease-out;

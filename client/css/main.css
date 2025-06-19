@@ -11,6 +11,7 @@ body {
     line-height: 1rem;
     letter-spacing: 0.025rem;
     font-family: sans-serif;
+    overflow: hidden;
 }
 
 
@@ -391,10 +392,15 @@ video:fullscreen {
     justify-content: start;
 }
 
-#effects .effect-button {
+#effects .effect-button-wrapper {
     position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
+}
+
+#effects .effect-button {
+    width: 100%;
+    height: 100%;
     padding: 8px;
     border: 1px solid #555;
     border-radius: 8px;
@@ -456,6 +462,29 @@ video:fullscreen {
     100% {
         box-shadow: 0 0 4px rgba(76, 175, 80, 0.6), 0 0 8px rgba(76, 175, 80, 0.4);
     }
+}
+
+.effect-progress-bar {
+    position: absolute;
+    bottom: -6px;
+    left: 5%;
+    width: 90%;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.effect-progress-bar-inner {
+    height: 100%;
+    width: 100%;
+    background-color: #4CAF50;
+    border-radius: 2px;
+    transition: width 0.05s linear;
+}
+
+.effect-progress-bar.remote .effect-progress-bar-inner {
+    background-color: #c13434;
 }
 
 /* Piano Resize Handle */

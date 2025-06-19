@@ -6,7 +6,7 @@ export class RainEffect {
         this.icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"></path></svg>`;
         this.cssPath = 'js/effects/rain/effect.css';
 
-        // ... (properties bleiben gleich) ...
+        this.duration = 10000;
         this.container = null;
         this.onFinish = null;
         this.audio = null;
@@ -25,7 +25,7 @@ export class RainEffect {
         this.container.classList.add('rain-effect');
 
         try {
-            this.audio = new Audio('js/effects/rain/rain.wav');
+            this.audio = new Audio('js/effects/rain/rain.aac');
             this.audio.loop = true;
             this.audio.volume = 0;
             this.audio.play().catch(e => this.logger.warn(`Audio playback failed: ${e.message}. Did you add the rain.wav file?`));
@@ -54,11 +54,11 @@ export class RainEffect {
 
         this.animate();
 
-        this.mainTimer = setTimeout(() => this.stop(), 10000);
+        this.mainTimer = setTimeout(() => this.stop(), this.duration);
         this.fadeTimer = setTimeout(() => {
             if (this.container) this.container.style.opacity = '0';
             this._fadeAudio(0, 1800);
-        }, 8000);
+        }, this.duration - 2000);
     }
 
     stop() {
@@ -83,7 +83,6 @@ export class RainEffect {
             });
         }
 
-        // DOM-Container sicher entfernen nach der Fade-Out-Transition
         if (this.container) {
             this.container.style.opacity = '0';
             setTimeout(() => {
@@ -92,12 +91,11 @@ export class RainEffect {
                 }
                 this.container = null;
 
-                // Callback erst nach vollständigem Aufräumen aufrufen
                 if (this.onFinish) {
                     this.onFinish();
                 }
 
-            }, 2000); // Muss die Dauer der CSS-Transition + Fade-Out-Zeit abdecken
+            }, 2000);
         } else {
              if (this.onFinish) {
                 this.onFinish();
@@ -105,7 +103,6 @@ export class RainEffect {
         }
     }
 
-    // ... (restliche Methoden wie _fadeAudio, resizeCanvas, animate bleiben gleich) ...
     _fadeAudio(targetVolume, duration) {
         return new Promise(resolve => {
             if (!this.audio || isNaN(this.audio.volume)) return resolve();
@@ -120,7 +117,9 @@ export class RainEffect {
                     return resolve();
                 }
                 const progress = elapsedTime / duration;
-                this.audio.volume = startVolume + (targetVolume - startVolume) * progress;
+                const newVolume = startVolume + (targetVolume - startVolume) * progress;
+                this.audio.volume = Math.max(0, Math.min(1, newVolume));
+
                 requestAnimationFrame(tick);
             };
             requestAnimationFrame(tick);
