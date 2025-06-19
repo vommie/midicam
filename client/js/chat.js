@@ -1,9 +1,11 @@
+import { isElementVisible } from './helpers.js';
 export class Chat {
 
     constructor(options) {
         this.container = options.container;
         this.onSendMessage = options.onSendMessage;
         this.logger = options.logger || { info: console.log, debug: console.log, error: console.error };
+        this.notifier = options.notifier;
 
         this.messagesEl = this.container.querySelector('.chat-messages');
         this.formEl = this.container.querySelector('.chat-form');
@@ -37,7 +39,20 @@ export class Chat {
     handleRemoteMessage(message) {
         this.addMessage(message, 'remote');
         this.logger.debug(`Received remote chat message.`);
-        this.receiveSound.play().catch(e => this.logger.error("Error playing chat receive sound:", e));
+
+        if (!isElementVisible(this.messagesEl) && this.notifier) {
+            this.notifier.show({
+                position: 'nw',
+                icon: 'chat',
+                title: 'Incoming chat message!',
+                text: message,
+                duration: 5000,
+                showProgress: true,
+                sound: false
+            });
+        } else {
+             this.receiveSound.play().catch(e => this.logger.error("Error playing chat receive sound:", e));
+        }
     }
 
     addMessage(text, sender) {
@@ -52,7 +67,11 @@ export class Chat {
 
         const messageText = document.createElement('p');
         messageText.classList.add('message-text');
-        messageText.textContent = text;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.textContent = text;
+        messageText.innerHTML = tempDiv.innerHTML.replace(/\n/g, '<br>');
+
 
         bubble.appendChild(senderName);
         bubble.appendChild(messageText);

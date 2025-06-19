@@ -8,6 +8,7 @@ import { FileSharing } from './filesharing.js';
 import { Log } from './logs.js';
 import { Sidebar } from './sidebar.js';
 import { Dialog } from './dialog.js';
+import { Notifications } from './notifications.js';
 
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
 
@@ -54,6 +55,7 @@ let isSelfMuted = false;
 const pianos = new Pianos();
 let metronome;
 let chat;
+let notifier;
 let fileSharing;
 let camLocalDrag;
 const activeScreenShares = new Map();
@@ -1337,6 +1339,7 @@ function sendMidiMessage(midiData) {
 
 async function init() {
     new Sidebar();
+    notifier = new Notifications({ logger });
     camLocalDrag = new CamLocalDrag();
 
     try {
@@ -1391,6 +1394,7 @@ async function init() {
 
     chat = new Chat({
         container: document.getElementById('chat-container'),
+        notifier: notifier,
         onSendMessage: (message) => {
             if (chatChannel && chatChannel.readyState === 'open') {
                 chatChannel.send(message);
