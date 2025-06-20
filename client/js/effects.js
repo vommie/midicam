@@ -147,13 +147,14 @@
 import { RainEffect } from '../effects/rain/rain.js';
 import { TumbleweedEffect } from '../effects/tumbleweed/tumbleweed.js';
 import { JizzEffect } from '../effects/jizz/jizz.js';
+import { WunderlichEffect } from '../effects/wunderlich/effect.js';
 
 export class Effects {
     constructor(options) {
         this.logger = options.logger;
         this.onSendMessage = options.onSendMessage;
         this.container = document.getElementById('effects-grid');
-        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect];
+        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect];
         this.effects = new Map();
         this.activeEffect = null;
         this.effectButtons = new Map();
@@ -203,7 +204,7 @@ export class Effects {
         });
     }
 
-    startEffect(id, isRemote = false) {
+    async startEffect(id, isRemote = false, data = {}) {
         if (this.activeEffect) {
             this.logger.debug('Another effect is already active. Ignoring request.');
             return;
@@ -218,7 +219,10 @@ export class Effects {
         this.activeEffect = effect;
 
         if (!isRemote && typeof this.onSendMessage === 'function') {
-            this.onSendMessage({ subType: 'start', id: effect.id });
+            if (typeof effect.prepareData === 'function') {
+                data = await effect.prepareData();
+            }
+            this.onSendMessage({ subType: 'start', id: effect.id, data: data });
         }
 
         if (effect.cssPath) {
@@ -230,15 +234,20 @@ export class Effects {
             btnInfo.button.disabled = true;
         });
 
-        this.startProgressBar(id, effect.duration, isRemote);
-
         const effectContainer = document.createElement('div');
         effectContainer.id = 'effect-main-container';
         document.body.appendChild(effectContainer);
 
-        effect.start(effectContainer, () => {
+        const onFinishCallback = () => {
              this.stopActiveEffect(isRemote);
-        });
+        };
+
+        const duration = await effect.start(effectContainer, onFinishCallback, isRemote, data);
+
+        const progressBarDuration = duration || effect.duration;
+        if (progressBarDuration) {
+            this.startProgressBar(id, progressBarDuration, isRemote);
+        }
     }
 
     stopActiveEffect(isRemote = false) {
@@ -264,11 +273,14 @@ export class Effects {
         });
     }
 
- startProgressBar(id, duration, isRemote) {
+    startProgressBar(id, duration, isRemote) {
         if (!duration) return;
 
         const { wrapper } = this.effectButtons.get(id);
         if (!wrapper) return;
+
+        const existingBar = wrapper.querySelector('.effect-progress-bar');
+        if(existingBar) existingBar.remove();
 
         const progressBar = document.createElement('div');
         progressBar.className = 'effect-progress-bar';
@@ -309,7 +321,7 @@ export class Effects {
         this.logger.debug(`Received remote effect command: ${msg.subType} for ${msg.id}`);
         switch (msg.subType) {
             case 'start':
-                this.startEffect(msg.id, true);
+                this.startEffect(msg.id, true, msg.data || {});
                 break;
             case 'stop':
                 if (this.activeEffect && this.activeEffect.id === msg.id && typeof this.activeEffect.stop === 'function') {
