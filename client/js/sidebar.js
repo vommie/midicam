@@ -82,14 +82,26 @@ export class Sidebar {
         this.tooltipEl.className = 'sidebar-custom-tooltip';
         this.sidebar.appendChild(this.tooltipEl);
 
-        const tooltipTriggers = this.sidebar.querySelectorAll('[data-tooltip]');
-        tooltipTriggers.forEach(trigger => {
-            if (trigger.getAttribute('title')) {
+        const initialTriggers = this.sidebar.querySelectorAll('[title]');
+        initialTriggers.forEach(trigger => {
+            if (!trigger.hasAttribute('data-tooltip')) {
                 trigger.setAttribute('data-tooltip', trigger.getAttribute('title'));
                 trigger.removeAttribute('title');
             }
-            trigger.addEventListener('mouseenter', this.boundShowTooltip);
-            trigger.addEventListener('mouseleave', this.boundHideTooltip);
+        });
+
+        this.sidebar.addEventListener('mouseover', e => {
+            const trigger = e.target.closest('[data-tooltip]');
+            if (trigger) {
+                this.boundShowTooltip({ currentTarget: trigger });
+            }
+        });
+
+        this.sidebar.addEventListener('mouseout', e => {
+            const trigger = e.target.closest('[data-tooltip]');
+            if (trigger && !trigger.contains(e.relatedTarget)) {
+                this.boundHideTooltip();
+            }
         });
     }
 
