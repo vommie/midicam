@@ -147,7 +147,7 @@
 import { RainEffect } from '../effects/rain/rain.js';
 import { TumbleweedEffect } from '../effects/tumbleweed/tumbleweed.js';
 import { JizzEffect } from '../effects/jizz/jizz.js';
-import { WunderlichEffect } from '../effects/wunderlich/effect.js';
+import { WunderlichEffect } from '../effects/wunderlich/wunderlich.js';
 
 export class Effects {
     constructor(options) {
