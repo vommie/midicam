@@ -475,6 +475,23 @@ video:fullscreen {
     }
 }
 
+#effects .effect-button.remote-active {
+    border-color: #c13434;
+    animation: effect-remote-active-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes effect-remote-active-glow {
+    0% {
+        box-shadow: 0 0 4px rgba(193, 52, 52, 0.6), 0 0 8px rgba(193, 52, 52, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 12px rgba(220, 60, 60, 0.9), 0 0 20px rgba(220, 60, 60, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 4px rgba(193, 52, 52, 0.6), 0 0 8px rgba(193, 52, 52, 0.4);
+    }
+}
+
 .effect-progress-bar {
     position: absolute;
     bottom: -6px;
