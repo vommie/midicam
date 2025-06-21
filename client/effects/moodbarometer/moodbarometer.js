@@ -52,8 +52,6 @@ export class MoodBarometerEffect {
         this.onFinish = onFinishCallback;
         this.onSendMessage = onSendMessage;
 
-        this._preloadSounds();
-
         if (!document.getElementById('mood-barometers-wrapper')) {
             const wrapper = document.createElement('div');
             wrapper.id = 'mood-barometers-wrapper';
@@ -147,20 +145,23 @@ export class MoodBarometerEffect {
         return { range: 'ice', emoji: '🥶', sound: '0.aac' };
     }
 
-    _preloadSounds() {
-        ['0.aac', '1.aac', '2.aac', '3.aac'].forEach(sound => {
-            if (!this.audios[sound]) {
-                this.audios[sound] = new Audio(`effects/moodbarometer/${sound}`);
-                this.audios[sound].volume = 0.6;
-            }
-        });
-    }
-
     _playSoundForValue(value) {
         const { sound } = this._getMoodDetails(value);
-        if (this.audios[sound]) {
-            this.audios[sound].currentTime = 0;
-            this.audios[sound].play().catch(e => this.logger.warn(`Audio failed: ${e.message}`));
+        let audio = this.audios[sound];
+        if (!audio) {
+            audio = new Audio(`effects/moodbarometer/${sound}`);
+            audio.volume = 0.6;
+            this.audios[sound] = audio;
+        }
+
+        if (audio.readyState >= 2) {
+             audio.currentTime = 0;
+             audio.play().catch(e => this.logger.warn(`Audio failed: ${e.message}`));
+        } else {
+            audio.addEventListener('canplaythrough', () => {
+                audio.currentTime = 0;
+                audio.play().catch(e => this.logger.warn(`Audio failed: ${e.message}`));
+            }, { once: true });
         }
     }
 
@@ -219,7 +220,6 @@ export class MoodBarometerEffect {
             document.removeEventListener('touchend', handleEnd);
 
             const finalValue = parseFloat(selector.style.getPropertyValue('--mood-value'));
-            this._playSoundForValue(finalValue);
             setTimeout(() => onRelease(finalValue), 250);
         };
 
