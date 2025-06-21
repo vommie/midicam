@@ -1,0 +1,168 @@
+#mood-barometers-wrapper {
+    position: absolute;
+    top: 50%;
+    left: 20px;
+    transform: translateY(-50%);
+    z-index: 9500;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    pointer-events: none;
+}
+
+.mood-barometer {
+    --mood-value: 50;
+    --bar-height: 40vh;
+    --bar-width: 25px;
+    --fill-color: hsl(calc(var(--mood-value) * 1.2), 90%, 60%);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 3px;
+    border-radius: 20px;
+    background: rgba(20, 20, 20, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    opacity: 0;
+    transform: translateX(-50px);
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+}
+
+.mood-barometer.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.mood-barometer.local {
+    animation: mood-glow-green 1.8s ease-in-out infinite;
+}
+.mood-barometer.peer {
+    animation: mood-glow-red 1.8s ease-in-out infinite;
+}
+
+.mood-emoji {
+    font-size: 48px;
+    line-height: 1;
+    filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));
+}
+
+.mood-bar-wrapper {
+    display: flex;
+    gap: 10px;
+    height: var(--bar-height);
+}
+
+.mood-bar-track {
+    position: relative;
+    width: var(--bar-width);
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mood-bar-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(var(--mood-value) * 1%);
+    background: linear-gradient(to top, #3b82f6, #60a5fa, #facc15, #f97316, #ef4444);
+    background-size: 100% 100%;
+    background-position: 0 calc(100% - var(--mood-value) * 1%);
+    border-radius: 15px;
+}
+
+.mood-bar-markers {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 74%;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+    position: absolute;
+    left: 35%;
+    text-align: center;
+}
+
+.mood-user-label {
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 1px 3px black;
+}
+
+@keyframes mood-glow-green {
+    0%, 100% { box-shadow: 0 0 8px rgba(76, 175, 80, 0.5), 0 0 16px rgba(76, 175, 80, 0.3); border-color: rgba(76, 175, 80, 0.6); }
+    50% { box-shadow: 0 0 20px rgba(88, 192, 92, 0.9), 0 0 40px rgba(88, 192, 92, 0.7); border-color: rgba(88, 192, 92, 1); }
+}
+@keyframes mood-glow-red {
+    0%, 100% { box-shadow: 0 0 8px rgba(193, 52, 52, 0.5), 0 0 16px rgba(193, 52, 52, 0.3); border-color: rgba(193, 52, 52, 0.6); }
+    50% { box-shadow: 0 0 20px rgba(220, 60, 60, 0.9), 0 0 40px rgba(220, 60, 60, 0.7); border-color: rgba(220, 60, 60, 1); }
+}
+
+.mood-selector-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(5px);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.mood-selector-container {
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    text-align: center;
+    color: white;
+}
+.mood-selector-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+.mood-selector-info {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-top: 20px;
+}
+.mood-barometer-selector {
+    --mood-value: 50;
+    --bar-height: 50vh;
+    --bar-width: 40px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+.mood-barometer-selector .mood-drag-handle {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--mood-value) * 1%);
+    transform: translate(-50%, 50%);
+    width: 60px;
+    height: 30px;
+    background: white;
+    border-radius: 8px;
+    border: 2px solid #333;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    cursor: ns-resize;
+    z-index: 10;
+    transition: transform 0.1s ease-out, background-color 0.2s;
+}
+.mood-barometer-selector .mood-drag-handle:hover {
+    background-color: #f0f0f0;
+    transform: translate(-50%, 50%) scale(1.05);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

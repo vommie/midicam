@@ -107,14 +107,14 @@ import { TumbleweedEffect } from '../effects/tumbleweed/tumbleweed.js';
 import { JizzEffect } from '../effects/jizz/jizz.js';
 import { WunderlichEffect } from '../effects/wunderlich/wunderlich.js';
 import { PianoTeacherEffect } from '../effects/piano-teacher/pianoteacher.js';
-
+import { MoodBarometerEffect } from '../effects/moodbarometer/moodbarometer.js';
 
 export class Effects {
     constructor(options) {
         this.logger = options.logger;
         this.onSendMessage = options.onSendMessage;
         this.container = document.getElementById('effects-grid');
-        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect, PianoTeacherEffect];
+        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect, PianoTeacherEffect, MoodBarometerEffect];
         this.effects = new Map();
         this.activeEffect = null;
         this.effectButtons = new Map();
@@ -315,7 +315,7 @@ export class Effects {
         }
 
         switch (msg.subType) {
-            case 'start':
+             case 'start':
                 if (this.activeEffect && this.activeEffect.id === msg.id) {
                     this.logger.info(`Received start for already active remote effect '${msg.id}'. Replacing it.`);
                     if (typeof this.activeEffect.stop === 'function') {

@@ -14,3 +14,4 @@ banana.png/svg: https://www.svgrepo.com/svg/31590/penis
 moan.aac: https://www.youtube.com/watch?v=IU3315DpRTA
 pianoteacher_icon.svg: https://www.svgrepo.com/svg/217249/robot
 gear.svg: https://www.svgrepo.com/svg/300265/gear
+mood_icon.svg: https://www.svgrepo.com/svg/484694/thermometer
