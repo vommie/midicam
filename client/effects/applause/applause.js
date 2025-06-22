@@ -100,7 +100,6 @@ export class ApplauseEffect {
         this.audioSources = {};
         const audioFiles = [0, 1, 2, 3, 4].map(i => `effects/applause/applause_${i}.aac`);
         audioFiles.push('effects/applause/confetti.aac');
-        audioFiles.push('effects/applause/explosion.aac');
 
         const loadPromises = audioFiles.map(async (path) => {
             try {
@@ -304,7 +303,6 @@ export class ApplauseEffect {
                 audio.gainNode.gain.linearRampToValueAtTime(0, now + 1.0);
             }
         }
-        this.playSound('explosion', 1.0);
 
         this.elements.gameContainer.classList.add('exploding');
 
