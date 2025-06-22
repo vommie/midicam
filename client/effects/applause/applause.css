@@ -1,0 +1,204 @@
+.applause-game-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    background-color: rgba(20, 20, 20, 0.85);
+    backdrop-filter: blur(10px);
+    border-radius: 24px;
+    padding: 30px 40px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+    user-select: none;
+    overflow: visible;
+    z-index: 1;
+    pointer-events: auto;
+}
+
+.applause-game-container.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+@keyframes applause-explode {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+        filter: blur(0px);
+    }
+    40% {
+        transform: translate(-50%, -50%) scale(1.1) rotate(5deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(2.5) rotate(-10deg);
+        opacity: 0;
+        filter: blur(40px);
+    }
+}
+
+.applause-game-container.exploding {
+    animation: applause-explode 0.6s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards;
+    animation-name: applause-explode;
+    animation-iteration-count: 1;
+}
+
+
+.applause-game-container.local-player-glow {
+    animation: effect-active-glow 1.8s ease-in-out infinite;
+}
+
+.applause-game-container.remote-player-glow {
+    animation: effect-remote-active-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes effect-active-glow {
+    0% { box-shadow: 0 0 4px rgba(76, 175, 80, 0.6), 0 0 8px rgba(76, 175, 80, 0.4); }
+    50% { box-shadow: 0 0 12px rgba(88, 192, 92, 0.9), 0 0 20px rgba(88, 192, 92, 0.7); }
+    100% { box-shadow: 0 0 4px rgba(76, 175, 80, 0.6), 0 0 8px rgba(76, 175, 80, 0.4); }
+}
+
+@keyframes effect-remote-active-glow {
+    0% { box-shadow: 0 0 4px rgba(193, 52, 52, 0.6), 0 0 8px rgba(193, 52, 52, 0.4); }
+    50% { box-shadow: 0 0 12px rgba(220, 60, 60, 0.9), 0 0 20px rgba(220, 60, 60, 0.7); }
+    100% { box-shadow: 0 0 4px rgba(193, 52, 52, 0.6), 0 0 8px rgba(193, 52, 52, 0.4); }
+}
+
+.applause-hands-container {
+    position: relative;
+    width: 250px;
+    height: 200px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.applause-hand {
+    position: absolute;
+    width: 120px;
+    height: auto;
+    transition: transform 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+}
+
+.hand-left { transform: translateX(-35px) rotate(-15deg); }
+.hand-right { transform: translateX(35px) rotate(15deg) scaleX(-1); }
+
+@keyframes clap-animation {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+.applause-hands-container.clapping {
+    animation: clap-animation 0.15s ease-out;
+}
+
+.applause-hands-container.clapping .hand-left { transform: translateX(-5px) rotate(-5deg) scale(1.05); }
+.applause-hands-container.clapping .hand-right { transform: translateX(5px) rotate(5deg) scaleX(-1) scale(1.05); }
+
+
+.applause-counter-container {
+    text-align: center;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 20px;
+    border-radius: 12px;
+}
+
+.applause-counter-label {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+.applause-counter-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #fff;
+    line-height: 1.1;
+    text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+@keyframes applause-shake {
+    10%, 90% { transform: translate(calc(-50% - 1px), -50%) scale(1) rotate(-0.5deg); }
+    20%, 80% { transform: translate(calc(-50% + 2px), -50%) scale(1) rotate(0.5deg); }
+    30%, 50%, 70% { transform: translate(calc(-50% - 2px), -50%) scale(1) rotate(-0.5deg); }
+    40%, 60% { transform: translate(calc(-50% + 2px), -50%) scale(1) rotate(0.5deg); }
+}
+
+.applause-game-container.max-applause-shake {
+    animation-name: applause-shake, effect-active-glow;
+    animation-duration: 0.4s, 1.8s;
+    animation-timing-function: cubic-bezier(.36,.07,.19,.97), ease-in-out;
+    animation-iteration-count: infinite, infinite;
+}
+.applause-game-container.remote-player-glow.max-applause-shake {
+    animation-name: applause-shake, effect-remote-active-glow;
+}
+
+.cps-progress-bar {
+    display: flex;
+    width: 80%;
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 3px;
+    padding: 2px;
+}
+
+.cps-progress-segment {
+    flex: 1;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cps-progress-segment:nth-of-type(1).active { background-color: #888; box-shadow: 0 0 6px rgba(180, 180, 180, 0.5); }
+.cps-progress-segment:nth-of-type(2).active { background-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.7); }
+.cps-progress-segment:nth-of-type(3).active { background-color: #ffc107; box-shadow: 0 0 10px rgba(255, 193, 7, 0.7); }
+.cps-progress-segment:nth-of-type(4).active { background-color: #c13434; box-shadow: 0 0 12px rgba(193, 52, 52, 0.8); animation: pulse-red 0.8s ease-in-out infinite; }
+
+@keyframes pulse-red {
+    0% { background-color: #c13434; box-shadow: 0 0 12px rgba(193, 52, 52, 0.8); }
+    50% { background-color: #ff4d4d; box-shadow: 0 0 20px rgba(255, 77, 77, 1); }
+    100% { background-color: #c13434; box-shadow: 0 0 12px rgba(193, 52, 52, 0.8); }
+}
+
+
+.confetti-particle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    top: -20px;
+    animation: confetti-fall 4s linear forwards;
+    z-index: 8999;
+    --x-drift: 0;
+}
+
+@keyframes confetti-fall {
+    from {
+        transform: translateY(0) translateX(0) rotate(0deg);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(110vh) translateX(var(--x-drift)) rotate(1080deg);
+        opacity: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .applause-game-container { padding: 20px; gap: 15px; }
+    .applause-hands-container { width: 200px; height: 160px; }
+    .applause-hand { width: 100px; }
+}

@@ -108,13 +108,14 @@ import { JizzEffect } from '../effects/jizz/jizz.js';
 import { WunderlichEffect } from '../effects/wunderlich/wunderlich.js';
 import { PianoTeacherEffect } from '../effects/piano-teacher/pianoteacher.js';
 import { MoodBarometerEffect } from '../effects/moodbarometer/moodbarometer.js';
+import { ApplauseEffect } from '../effects/applause/applause.js';
 
 export class Effects {
     constructor(options) {
         this.logger = options.logger;
         this.onSendMessage = options.onSendMessage;
         this.container = document.getElementById('effects-grid');
-        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect, PianoTeacherEffect, MoodBarometerEffect];
+        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect, PianoTeacherEffect, MoodBarometerEffect, ApplauseEffect];
         this.effects = new Map();
         this.activeEffect = null;
         this.effectButtons = new Map();

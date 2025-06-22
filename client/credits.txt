@@ -15,3 +15,13 @@ moan.aac: https://www.youtube.com/watch?v=IU3315DpRTA
 pianoteacher_icon.svg: https://www.svgrepo.com/svg/217249/robot
 gear.svg: https://www.svgrepo.com/svg/300265/gear
 mood_icon.svg: https://www.svgrepo.com/svg/484694/thermometer
+applause.svg: https://www.svgrepo.com/svg/434308/clap
+applause sounds (remixed):
+    https://pixabay.com/sound-effects/calling-whistle-41861/
+    https://pixabay.com/sound-effects/woohoo-1-92954/
+    https://pixabay.com/sound-effects/crowd-cheering-310544/
+    https://pixabay.com/sound-effects/sound-effect-crowd-applause-and-cheering-237756/
+    https://pixabay.com/sound-effects/applause-alks-ses-efekti-125030/
+    https://pixabay.com/sound-effects/applause-236785/
+    https://pixabay.com/sound-effects/applause-cheer-236786/
+    https://pixabay.com/sound-effects/one-person-clapping-43355/
