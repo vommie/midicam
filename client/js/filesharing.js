@@ -21,6 +21,10 @@ export class FileSharing {
         this.sentSound = new Audio('assets/file_sent.wav');
         this.receiveSound = new Audio('assets/notification.wav');
 
+        this.db = options.db;
+        this.peerUUID = null;
+        this._setupHeaderUI();
+
         this._setupUI();
         this._setupEventListeners();
         this.disable();
@@ -30,6 +34,40 @@ export class FileSharing {
         this.dropZoneEl = this.container.querySelector('.filesharing-dropzone');
         this.fileListEl = this.container.querySelector('.filesharing-list');
         this.fileInputEl = this.container.querySelector('.filesharing-input');
+    }
+
+    _setupHeaderUI() {
+        const header = this.container.querySelector('.sidebar-section-header');
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'header-actions';
+        actionsDiv.style.display = 'flex';
+        actionsDiv.style.alignItems = 'center';
+        actionsDiv.style.gap = '8px';
+        actionsDiv.style.marginLeft = 'auto';
+        actionsDiv.style.marginRight = '8px';
+
+        this.sizeLabel = document.createElement('span');
+        this.sizeLabel.style.fontSize = '0.75rem';
+        this.sizeLabel.style.color = '#aaa';
+        this.sizeLabel.textContent = '0 MB';
+
+        const clearBtn = document.createElement('button');
+        clearBtn.innerHTML = '🧹';
+        clearBtn.title = 'Clear file history';
+        clearBtn.style.background = 'none';
+        clearBtn.style.border = 'none';
+        clearBtn.style.cursor = 'pointer';
+        clearBtn.style.padding = '0';
+        clearBtn.style.fontSize = '1.1rem';
+
+        clearBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.clearHistory();
+        });
+
+        actionsDiv.appendChild(this.sizeLabel);
+        actionsDiv.appendChild(clearBtn);
+        header.insertBefore(actionsDiv, header.querySelector('.chevron'));
     }
 
     _setupEventListeners() {
@@ -254,13 +292,27 @@ export class FileSharing {
         transfer.element.querySelector('.progress-container').style.display = 'none';
     }
 
-    _finalizeTransfer(id, fileBlob) {
+    async _finalizeTransfer(id, fileBlob) {
         const transfer = this.activeTransfers.get(id);
         if (!transfer) return;
 
         const fileName = transfer.file ? transfer.file.name : transfer.name;
-        const direction = transfer.file ? 'Sent' : 'Received';
+        const direction = transfer.file ? 'local' : 'remote';
+        const fileType = transfer.file ? transfer.file.type : transfer.type;
+
         this.logger.info(`Transfer ${id} finalized. ${direction} ${fileName} successfully.`);
+
+        if (this.db && this.peerUUID) {
+            try {
+                await this.db.addFile(this.peerUUID, id, fileName, fileType, fileBlob.size, direction, fileBlob);
+                const history = await this.db.getFiles(this.peerUUID);
+                const totalBytes = history.reduce((acc, curr) => acc + curr.size, 0);
+                this._updateSizeUI(totalBytes);
+            } catch (e) {
+                this.logger.error(`Failed to save file to DB: ${e.message}`);
+            }
+        }
+
 
         transfer.completed = true;
         transfer.element.querySelector('.progress-container').style.display = 'none';
@@ -268,8 +320,6 @@ export class FileSharing {
 
         const actionLink = transfer.element.querySelector('.file-action');
         actionLink.style.display = 'block';
-
-        const fileType = transfer.file ? transfer.file.type : transfer.type;
 
         const openOrDownload = (e) => {
             if (e) e.preventDefault();
@@ -365,4 +415,62 @@ export class FileSharing {
             check();
         });
     }
+
+    async loadHistory(peerUUID) {
+        this.peerUUID = peerUUID;
+        this.logger.info(`Loading file history for peer: ${peerUUID}`);
+
+        if (this.db) {
+            const history = await this.db.getFiles(peerUUID);
+            let totalBytes = 0;
+
+            this.fileListEl.innerHTML = '';
+
+            history.forEach(file => {
+                totalBytes += file.size;
+                // Create history UI without progress bars
+                const item = this._createFileItemUI(file.id, file.name, file.size, file.direction === 'local');
+                item.querySelector('.progress-container').style.display = 'none';
+                item.querySelector('.status-text').style.display = 'none';
+
+                const actionLink = item.querySelector('.file-action');
+                actionLink.style.display = 'block';
+
+                actionLink.onclick = (e) => {
+                    e.preventDefault();
+                    const url = URL.createObjectURL(file.blob);
+                    if (file.type.startsWith('image/') || file.type.startsWith('text/') || file.type === 'application/pdf' || file.type.startsWith('video/') || file.type.startsWith('audio/')) {
+                        window.open(url, '_blank');
+                    } else {
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                };
+            });
+            this._updateSizeUI(totalBytes);
+        } else {
+            this.fileListEl.innerHTML = '';
+        }
+    }
+
+    async clearHistory() {
+        if (!this.peerUUID || !this.db) return;
+        if (confirm('Are you sure you want to delete all stored files for this peer?')) {
+            await this.db.clearFiles(this.peerUUID);
+            this.fileListEl.innerHTML = '';
+            this._updateSizeUI(0);
+            this.logger.info('File history cleared.');
+        }
+    }
+
+    _updateSizeUI(bytes) {
+        const mb = (bytes / (1024 * 1024)).toFixed(2);
+        this.sizeLabel.textContent = `${mb} MB`;
+    }
+
 }

@@ -10,6 +10,7 @@ import { Sidebar } from './sidebar.js';
 import { Dialog } from './dialog.js';
 import { Notifications } from './notifications.js';
 import { Effects } from './effects.js';
+import { MidiCamDB } from './db.js';
 
 // --- Logger Initialization ---
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
@@ -57,16 +58,23 @@ let lastMicVolume = 1;
 let lastRemoteVolume = 1;
 let isSelfMuted = false;
 let iceReconnectTimer = null;
+let myUUID = localStorage.getItem('my_uuid');
+if (!myUUID) {
+    myUUID = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now();
+    localStorage.setItem('my_uuid', myUUID);
+}
+let peerUUID = null;
+let db = null;
 
 // --- Perfect Negotiation Variables ---
 let polite = false;
 let makingOffer = false;
 let ignoreOffer = false;
 let isSettingRemoteAnswerPending = false;
-let pendingIceCandidates =[];
+let pendingIceCandidates = [];
 
 // --- High Performance MIDI Variables ---
-let midiOutBuffer =[];
+let midiOutBuffer = [];
 let midiOutQueued = false;
 
 // --- Constants ---
@@ -138,6 +146,14 @@ function loadSettings() {
         try {
             const settings = JSON.parse(savedSettings);
             if (settings.serverUrl) serverUrlInput.value = settings.serverUrl;
+            if (settings.micVolume !== undefined) {
+                micVolume.value = settings.micVolume;
+                lastMicVolume = settings.micVolume;
+            }
+            if (settings.remoteVolume !== undefined) {
+                remoteVolume.value = settings.remoteVolume;
+                lastRemoteVolume = settings.remoteVolume;
+            }
             return settings;
         } catch (err) {
             logger.error(`Failed to parse saved settings: ${err.message}`);
@@ -434,7 +450,7 @@ function applyStreamToApp(stream) {
         sendSelfMuteStatus(false);
     }
 
-    const finalTracks =[videoTrack, processedAudioTrack].filter(Boolean);
+    const finalTracks = [videoTrack, processedAudioTrack].filter(Boolean);
     localStream = new MediaStream(finalTracks);
     logger.info(`Local stream applied with ${localStream.getTracks().length} track(s).`);
 
@@ -526,7 +542,7 @@ function flushMidiBuffer() {
 
     if (midiChannel.bufferedAmount > MIDI_BUFFER_THRESHOLD) {
         logger.warn(`MIDI drop: High WebRTC buffer (${midiChannel.bufferedAmount} bytes). Avoid spamming network.`);
-        midiOutBuffer =[];
+        midiOutBuffer = [];
         return;
     }
 
@@ -549,7 +565,7 @@ function flushMidiBuffer() {
         logger.error(`Failed to send MIDI batch: ${e.message}`);
     }
 
-    midiOutBuffer =[];
+    midiOutBuffer = [];
 }
 
 function sendMidiMessage(midiData) {
@@ -619,7 +635,7 @@ function resetConnectionState() {
     makingOffer = false;
     ignoreOffer = false;
     isSettingRemoteAnswerPending = false;
-    pendingIceCandidates =[];
+    pendingIceCandidates = [];
 }
 
 function updateUIForConnectionStart() {
@@ -634,7 +650,7 @@ function initializePeerConnection() {
 
     try {
         pc = new RTCPeerConnection({
-            iceServers:[
+            iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 {
@@ -862,7 +878,9 @@ async function processSignalingMessage(msg) {
                 logger.info('Peer detected! Initializing P2P WebRTC connection...');
                 initializePeerConnection();
                 addLocalTracksToPeer();
-                initializeDataChannels();
+                if (!polite) {
+                    initializeDataChannels();
+                }
             }
             break;
 
@@ -1135,6 +1153,7 @@ function setupCommonDataChannel(channel) {
         logger.info('Common DataChannel is OPEN.');
         sendSelfMuteStatus(isSelfMuted);
         sendMidiSettingsStatus();
+        channel.send(JSON.stringify({ type: 'handshake', uuid: myUUID }));
     };
     channel.onclose = () => logger.info('Common DataChannel CLOSED.');
     channel.onerror = (err) => logger.error(`Common DataChannel error: ${err.message}`);
@@ -1142,6 +1161,12 @@ function setupCommonDataChannel(channel) {
         try {
             const msg = JSON.parse(event.data);
             switch (msg.type) {
+                case 'handshake':
+                    peerUUID = msg.uuid;
+                    logger.info(`Handshake successful. Peer UUID: ${peerUUID}`);
+                    chat.loadHistory(peerUUID);
+                    fileSharing.loadHistory(peerUUID);
+                    break;
                 case 'self_mute_status':
                     logger.info(`Peer ${msg.muted ? 'muted' : 'unmuted'} their microphone.`);
                     peerSelfMutedIndicator.classList.toggle('active', msg.muted);
@@ -1403,6 +1428,9 @@ function setEventListeners() {
 async function init() {
     logger.info('Booting MidiCam application...');
 
+    db = new MidiCamDB(logger);
+    await db.init();
+
     if (!navigator.mediaDevices) {
         logger.error('navigator.mediaDevices is undefined. Check if you are on HTTPS.');
         if (notifier) notifier.show({ title: 'Environment Error', text: 'Media API not available. Ensure you are using HTTPS.', icon: 'error', duration: 10000 });
@@ -1462,7 +1490,7 @@ async function init() {
     setEventListeners();
 
     fileSharing = new FileSharing({
-        container: '#filesharing-container', logger, notifier,
+        container: '#filesharing-container', logger, notifier, db,
         onSendData: (data) => {
             if (fileChannel && fileChannel.readyState === 'open') fileChannel.send(data);
             else logger.error('Cannot send file block: DataChannel offline.');
@@ -1470,7 +1498,7 @@ async function init() {
     });
 
     chat = new Chat({
-        container: document.getElementById('chat-container'), notifier,
+        container: document.getElementById('chat-container'), notifier, db, logger,
         onSendMessage: (message) => {
             if (chatChannel && chatChannel.readyState === 'open') chatChannel.send(message);
             else logger.error('Cannot send chat message: DataChannel offline.');

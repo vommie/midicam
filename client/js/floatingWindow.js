@@ -13,6 +13,14 @@ class FloatingWindow {
             ...options
         };
 
+        const savedState = JSON.parse(localStorage.getItem(`fw_state_${this.options.id}`));
+        if (savedState) {
+            this.options.initialWidth = savedState.width || this.options.initialWidth;
+            this.options.initialHeight = savedState.height || this.options.initialHeight;
+            this.options.initialRight = savedState.right || this.options.initialRight;
+            this.options.initialTop = savedState.top || this.options.initialTop;
+        }
+
         this.HEADER_HEIGHT = 24;
 
         this.isDragging = false;
@@ -96,6 +104,16 @@ class FloatingWindow {
         this.options.container.appendChild(this.wrapper);
     }
 
+    saveState() {
+        const state = {
+            width: this.wrapper.offsetWidth,
+            height: this.wrapper.offsetHeight,
+            right: parseInt(this.wrapper.style.right, 10),
+            top: parseInt(this.wrapper.style.top, 10)
+        };
+        localStorage.setItem(`fw_state_${this.options.id}`, JSON.stringify(state));
+    }
+
     updateSizeForAspectRatio() {
         if (this.placeholder.classList.contains('active') || !this.video.videoWidth || !this.video.videoHeight) {
             return;
@@ -110,11 +128,10 @@ class FloatingWindow {
         this.wrapper.style.height = totalHeight + 'px';
     }
 
-
     addEventListeners() {
-        this.wrapper.addEventListener('mousedown', (e) => {
-            const onResizeHandle = e.target.closest('.floating-window-resize-handle');
-            const onCloseButton = e.target.closest('.floating-window-close');
+        const handleDragStart = (clientX, clientY, target) => {
+            const onResizeHandle = target.closest('.floating-window-resize-handle');
+            const onCloseButton = target.closest('.floating-window-close');
 
             if (onResizeHandle || onCloseButton) {
                 return;
@@ -123,28 +140,85 @@ class FloatingWindow {
             this.isDragging = true;
             this.wrapper.style.cursor = 'move';
             const rect = this.wrapper.getBoundingClientRect();
-            this.startX = (window.innerWidth - e.clientX) - parseInt(this.wrapper.style.right);
-            this.startY = e.clientY - rect.top;
-            e.preventDefault();
-        });
+            this.startX = (window.innerWidth - clientX) - parseInt(this.wrapper.style.right);
+            this.startY = clientY - rect.top;
+            return true;
+        };
 
-        this.resizeHandle.addEventListener('mousedown', (e) => {
+        const handleResizeStart = (clientX, clientY) => {
             this.isResizing = true;
-            this.startX = e.clientX;
-            this.startY = e.clientY;
+            this.startX = clientX;
+            this.startY = clientY;
             this.startWidth = this.wrapper.offsetWidth;
             this.startHeight = this.wrapper.offsetHeight;
             this.startRight = parseInt(this.wrapper.style.right);
+        };
+
+        this.wrapper.addEventListener('mousedown', (e) => {
+            if (handleDragStart(e.clientX, e.clientY, e.target)) {
+                e.preventDefault();
+            }
+        });
+
+        this.resizeHandle.addEventListener('mousedown', (e) => {
+            handleResizeStart(e.clientX, e.clientY);
             e.preventDefault();
             e.stopPropagation();
         });
 
-        document.addEventListener('mousemove', this.handleMove.bind(this));
-        document.addEventListener('mouseup', () => {
-            this.isDragging = false;
-            this.isResizing = false;
-            this.wrapper.style.cursor = 'default';
-        });
+        this.wrapper.addEventListener('touchstart', (e) => {
+            if (handleDragStart(e.touches[0].clientX, e.touches[0].clientY, e.target)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        this.resizeHandle.addEventListener('touchstart', (e) => {
+            handleResizeStart(e.touches[0].clientX, e.touches[0].clientY);
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+
+        const handleMove = (clientX, clientY) => {
+            if (this.isDragging) {
+                let newRight = (window.innerWidth - clientX) - this.startX;
+                let newTop = clientY - this.startY;
+                this.setPosition(newRight, newTop);
+            }
+
+            if (this.isResizing) {
+                const widthChange = clientX - this.startX;
+                const newWidth = this.startWidth + widthChange;
+                const boundedWidth = Math.max(150, newWidth);
+
+                this.wrapper.style.width = boundedWidth + 'px';
+
+                const newRight = this.startRight - (boundedWidth - this.startWidth);
+                this.wrapper.style.right = newRight + 'px';
+
+                if (this.placeholder.classList.contains('active')) {
+                    const heightChange = clientY - this.startY;
+                    const newHeight = this.startHeight + heightChange;
+                    this.wrapper.style.height = Math.max(100, newHeight) + 'px';
+                } else {
+                    this.updateSizeForAspectRatio();
+                }
+            }
+        };
+
+        document.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
+        document.addEventListener('touchmove', (e) => handleMove(e.touches[0].clientX, e.touches[0].clientY), { passive: false });
+
+        const handleEnd = () => {
+            if (this.isDragging || this.isResizing) {
+                this.isDragging = false;
+                this.isResizing = false;
+                this.wrapper.style.cursor = 'default';
+                this.saveState();
+            }
+        };
+
+        document.addEventListener('mouseup', handleEnd);
+        document.addEventListener('touchend', handleEnd);
 
         this.video.addEventListener('dblclick', () => this.toggleFullscreen());
 
@@ -153,33 +227,6 @@ class FloatingWindow {
         });
 
         window.addEventListener('resize', this.ensureWithinViewport.bind(this));
-    }
-
-    handleMove(e) {
-        if (this.isDragging) {
-            let newRight = (window.innerWidth - e.clientX) - this.startX;
-            let newTop = e.clientY - this.startY;
-            this.setPosition(newRight, newTop);
-        }
-
-        if (this.isResizing) {
-            const widthChange = e.clientX - this.startX;
-            const newWidth = this.startWidth + widthChange;
-            const boundedWidth = Math.max(150, newWidth);
-
-            this.wrapper.style.width = boundedWidth + 'px';
-
-            const newRight = this.startRight - (boundedWidth - this.startWidth);
-            this.wrapper.style.right = newRight + 'px';
-
-            if (this.placeholder.classList.contains('active')) {
-                const heightChange = e.clientY - this.startY;
-                const newHeight = this.startHeight + heightChange;
-                this.wrapper.style.height = Math.max(100, newHeight) + 'px';
-            } else {
-                this.updateSizeForAspectRatio();
-            }
-        }
     }
 
     setPosition(right, top) {
