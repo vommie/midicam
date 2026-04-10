@@ -65,8 +65,12 @@ let ignoreOffer = false;
 let isSettingRemoteAnswerPending = false;
 let pendingIceCandidates =[];
 
+// --- High Performance MIDI Variables ---
+let midiOutBuffer =[];
+let midiOutQueued = false;
+
 // --- Constants ---
-const MIDI_BUFFER_THRESHOLD = 1024;
+const MIDI_BUFFER_THRESHOLD = 2048;
 const VIDEO_QUALITY = {
     DEFAULT: { maxBitrate: 6000 * 1000 },
     FULLSCREEN: { maxBitrate: 10000 * 1000 }
@@ -94,7 +98,6 @@ function parseServerUrl(url) {
         let port = urlObj.port;
 
         if (!port) {
-            // Intelligent fallback: localhost defaults to 8080, remote URLs to 443/80
             if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
                 port = '8080';
             } else {
@@ -110,14 +113,10 @@ function parseServerUrl(url) {
     }
 }
 
-/**
- * Saves current user settings to LocalStorage.
- */
 function saveSettings() {
     if (saveSettingsTimeout) {
         clearTimeout(saveSettingsTimeout);
     }
-
     saveSettingsTimeout = setTimeout(() => {
         const settings = {
             videoDeviceId: videoSelect.value,
@@ -133,9 +132,6 @@ function saveSettings() {
     }, 500);
 }
 
-/**
- * Loads user settings from LocalStorage.
- */
 function loadSettings() {
     const savedSettings = localStorage.getItem('settings');
     if (savedSettings) {
@@ -150,9 +146,6 @@ function loadSettings() {
     return { serverUrl: 'http://localhost:8080' };
 }
 
-/**
- * Sets up media devices dynamically, bypassing any Chrome hangs on buggy drivers (like OBS Virtual Camera).
- */
 async function setupMedia() {
     logger.info("Initializing media devices...");
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -166,7 +159,6 @@ async function setupMedia() {
             let isDone = false;
             const done = () => { if (!isDone) { isDone = true; resolve(); } };
 
-            // Polling prevents the app from freezing if getUserMedia hangs due to a driver bug
             const poll = setInterval(async () => {
                 const devs = await navigator.mediaDevices.enumerateDevices();
                 if (devs.some(d => d.label !== '')) {
@@ -197,9 +189,6 @@ async function setupMedia() {
     startMedia().catch(e => logger.error(`startMedia error: ${e.message}`));
 }
 
-/**
- * Populates device dropdowns securely.
- */
 async function populateDeviceOptions() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -219,14 +208,12 @@ async function populateDeviceOptions() {
 
         const settings = loadSettings();
 
-        // Restore video
         if (settings && settings.videoDeviceId && settings.videoDeviceId !== 'none' && videoDevices.some(d => d.deviceId === settings.videoDeviceId)) {
             videoSelect.value = settings.videoDeviceId;
         } else {
             videoSelect.value = videoDevices.length > 0 ? (videoDevices[0].deviceId || 'default') : 'none';
         }
 
-        // Restore audio
         if (settings && settings.audioDeviceId && settings.audioDeviceId !== 'none' && audioDevices.some(d => d.deviceId === settings.audioDeviceId)) {
             audioSelect.value = settings.audioDeviceId;
         } else {
@@ -241,9 +228,6 @@ async function populateDeviceOptions() {
     }
 }
 
-/**
- * Initializes the MIDI API securely and decoupled from the main boot sequence.
- */
 async function setupMidi() {
     logger.info("Initializing Web MIDI API...");
     if (!navigator.requestMIDIAccess) {
@@ -253,7 +237,6 @@ async function setupMidi() {
     }
 
     try {
-        // In Chrome 119+ this triggers a permission prompt
         midiAccess = await navigator.requestMIDIAccess();
         logger.info("MIDI access granted.");
         populateMidiUI();
@@ -296,9 +279,6 @@ function populateMidiUI() {
     midiOutputSelect.value = settings?.midiOutputDeviceId && outputs.some(o => o.id === settings.midiOutputDeviceId) ? settings.midiOutputDeviceId : 'none';
 }
 
-/**
- * Creates the Web Audio API processing graph for the local microphone.
- */
 function createAudioProcessingGraph(rawStream) {
     if (rawStream.getAudioTracks().length === 0) {
         gainNode = null;
@@ -321,18 +301,12 @@ function createAudioProcessingGraph(rawStream) {
     return destination.stream.getAudioTracks()[0];
 }
 
-/**
- * Stops all tracks in the currently active local media stream.
- */
 function stopLocalStreamTracks() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
 }
 
-/**
- * Starts or restarts local media devices (Camera/Microphone).
- */
 async function startMedia() {
     try {
         stopLocalStreamTracks();
@@ -359,8 +333,8 @@ async function startMedia() {
         let isHanging = true;
         const hangTimer = setTimeout(() => {
             if (isHanging) {
-                logger.warn("getUserMedia is taking longer than 5 seconds. The device or driver might be hanging (e.g. OBS Virtual Camera). Try selecting a different device.");
-                if (notifier) notifier.show({ title: 'Device Timeout', text: 'The selected camera or microphone is not responding. Try selecting a different device from the sidebar.', icon: 'warn', duration: 10000 });
+                logger.warn("getUserMedia is taking longer than 5 seconds. The device or driver might be hanging. Try selecting a different device.");
+                if (notifier) notifier.show({ title: 'Device Timeout', text: 'The selected camera or microphone is not responding.', icon: 'warn', duration: 10000 });
             }
         }, 5000);
 
@@ -378,9 +352,6 @@ async function startMedia() {
     }
 }
 
-/**
- * Switches media devices dynamically during an active call.
- */
 async function switchMedia() {
     const newVideoId = videoSelect.value;
     const newAudioId = audioSelect.value;
@@ -433,9 +404,6 @@ async function switchMedia() {
     }
 }
 
-/**
- * Binds the generated MediaStream safely into the local UI and WebRTC peer.
- */
 function applyStreamToApp(stream) {
     stopLocalStreamTracks();
 
@@ -459,7 +427,7 @@ function applyStreamToApp(stream) {
         sendSelfMuteStatus(true);
         camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
     } else if (processedAudioTrack && isSelfMuted && gainNode) {
-        gainNode.gain.value = 0; // maintain mute state
+        gainNode.gain.value = 0;
         camLocalDrag.floatingWindow.setMuteIndicatorActive(true);
     } else {
         camLocalDrag.floatingWindow.setMuteIndicatorActive(false);
@@ -472,7 +440,6 @@ function applyStreamToApp(stream) {
 
     camLocalDrag.floatingWindow.video.srcObject = localStream;
 
-    // Inject into WebRTC if currently connected
     if (pc) {
         logger.info("WebRTC connection exists. Injecting tracks dynamically.");
         replaceRTCSenderTrack('video', videoTrack);
@@ -482,13 +449,9 @@ function applyStreamToApp(stream) {
     saveSettings();
 }
 
-/**
- * Safely replaces a track in the active RTCPeerConnection using Transceivers.
- */
 async function replaceRTCSenderTrack(kind, newTrack) {
     if (!pc) return;
 
-    // Finds the associated transceiver via standard WebRTC methods (Sender.track is often null if previously stopped)
     const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === kind || (t.sender.track && t.sender.track.kind === kind));
 
     if (transceiver && transceiver.sender) {
@@ -508,9 +471,6 @@ async function replaceRTCSenderTrack(kind, newTrack) {
     }
 }
 
-/**
- * Adjusts the local microphone volume using the GainNode.
- */
 function adjustMicVolume() {
     if (gainNode && audioContext) {
         const newVolume = parseFloat(micVolume.value);
@@ -519,9 +479,6 @@ function adjustMicVolume() {
     }
 }
 
-/**
- * Adjusts the volume of the incoming remote peer stream.
- */
 function adjustRemoteVolume() {
     const lastVolume = remoteVideo.volume;
     const newVolume = parseFloat(remoteVolume.value);
@@ -533,9 +490,6 @@ function adjustRemoteVolume() {
     }
 }
 
-/**
- * Binds selected MIDI input to local functions and remote signaling.
- */
 async function connectMidi() {
     if (!midiAccess) return;
     try {
@@ -557,29 +511,63 @@ async function connectMidi() {
     }
 }
 
-/**
- * Event handler for incoming local MIDI events.
- * @param {MIDIMessageEvent} message - The MIDI event object
- */
-function handleLocalMidiMessage(message) {
-    const midiData = new Uint8Array(message.data);
-    pianos.getMIDIMessage(message, 'local');
+function queueMidiForNetwork(midiDataUint8) {
+    if (!midiChannel || midiChannel.readyState !== 'open') return;
+    midiOutBuffer.push(midiDataUint8);
 
-    const pianoInstance = pianos.pianos[0];
-    if (pianoInstance && pianoInstance.opts.sendMidi) {
-        if (midiChannel && midiChannel.readyState === 'open') {
-            if (midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
-                midiChannel.send(midiData.buffer);
-            } else {
-                logger.warn(`MIDI message dropped due to high buffer: ${midiChannel.bufferedAmount} bytes.`);
-            }
-        }
+    if (!midiOutQueued) {
+        midiOutQueued = true;
+        queueMicrotask(flushMidiBuffer);
     }
 }
 
-/**
- * Updates video encoding parameters based on fullscreen status.
- */
+function flushMidiBuffer() {
+    midiOutQueued = false;
+
+    if (midiChannel.bufferedAmount > MIDI_BUFFER_THRESHOLD) {
+        logger.warn(`MIDI drop: High WebRTC buffer (${midiChannel.bufferedAmount} bytes). Avoid spamming network.`);
+        midiOutBuffer =[];
+        return;
+    }
+
+    let totalSize = 0;
+    for (let i = 0; i < midiOutBuffer.length; i++) {
+        totalSize += 1 + midiOutBuffer[i].length;
+    }
+
+    const payload = new Uint8Array(totalSize);
+    let offset = 0;
+    for (let i = 0; i < midiOutBuffer.length; i++) {
+        payload[offset++] = midiOutBuffer[i].length;
+        payload.set(midiOutBuffer[i], offset);
+        offset += midiOutBuffer[i].length;
+    }
+
+    try {
+        midiChannel.send(payload.buffer);
+    } catch (e) {
+        logger.error(`Failed to send MIDI batch: ${e.message}`);
+    }
+
+    midiOutBuffer =[];
+}
+
+function sendMidiMessage(midiData) {
+    queueMidiForNetwork(midiData);
+}
+
+function handleLocalMidiMessage(message) {
+    const midiData = new Uint8Array(message.data);
+    const pianoInstance = pianos.pianos[0];
+
+    if (pianoInstance && pianoInstance.opts.sendMidi) {
+        queueMidiForNetwork(midiData);
+    }
+
+    pianos.getMIDIMessage(message, 'local');
+}
+
+
 async function updateVideoEncodingParameters(fullscreen = false) {
     if (!pc || pc.signalingState === 'closed') return;
     try {
@@ -599,9 +587,6 @@ async function updateVideoEncodingParameters(fullscreen = false) {
     }
 }
 
-/**
- * Main WebRTC Connection Initiator. Coordinates setup of PC, Signalling, and Channels.
- */
 async function startConnection() {
     resetConnectionState();
 
@@ -619,9 +604,6 @@ async function startConnection() {
     saveSettings();
 }
 
-/**
- * Clears existing RTCPeerConnection and Websocket, resetting internal states.
- */
 function resetConnectionState() {
     if (pc) {
         pc.close();
@@ -640,9 +622,6 @@ function resetConnectionState() {
     pendingIceCandidates =[];
 }
 
-/**
- * Prepares the UI specifically when the connection attempt starts.
- */
 function updateUIForConnectionStart() {
     startConnectionButton.disabled = true;
     startConnectionButton.style.backgroundColor = '#ccc';
@@ -650,9 +629,6 @@ function updateUIForConnectionStart() {
     serverUrlInput.disabled = true;
 }
 
-/**
- * Creates the RTCPeerConnection and binds core WebRTC events (Perfect Negotiation).
- */
 function initializePeerConnection() {
     logger.debug('Initializing RTCPeerConnection.');
 
@@ -749,9 +725,6 @@ function initializePeerConnection() {
     pc.ondatachannel = handleRemoteDataChannel;
 }
 
-/**
- * Handles changes in the ICE Connection State.
- */
 function handleIceConnectionStateChange() {
     if (!pc) return;
     switch (pc.iceConnectionState) {
@@ -781,9 +754,6 @@ function handleIceConnectionStateChange() {
     }
 }
 
-/**
- * Attaches local media tracks to the RTCPeerConnection.
- */
 function addLocalTracksToPeer() {
     if (!localStream) {
         logger.warn('No local stream is active right now. WebRTC will connect without video/audio initially.');
@@ -795,11 +765,8 @@ function addLocalTracksToPeer() {
     });
 }
 
-/**
- * Creates all Outbound WebRTC Data Channels.
- */
 function initializeDataChannels() {
-    midiChannel = pc.createDataChannel('midiChannel', { ordered: false, maxRetransmits: 0 });
+    midiChannel = pc.createDataChannel('midiChannel', { ordered: true });
     setupMidiChannel(midiChannel);
 
     fileChannel = pc.createDataChannel('fileChannel', { ordered: true });
@@ -815,10 +782,6 @@ function initializeDataChannels() {
     setupCommonDataChannel(commonDataChannel);
 }
 
-/**
- * Handles incoming Data Channels triggered by the remote peer.
- * @param {RTCDataChannelEvent} event
- */
 function handleRemoteDataChannel(event) {
     const channel = event.channel;
     logger.debug(`Inbound DataChannel received: ${channel.label}`);
@@ -849,12 +812,6 @@ function handleRemoteDataChannel(event) {
     }
 }
 
-/**
- * Configures the WebSocket connection to the signaling server.
- * @param {string} ip - Server IP/Hostname
- * @param {string} port - Server Port
- * @param {boolean} isSecure - WSS if true, WS if false
- */
 function setupWebsocketSignaling(ip, port, isSecure) {
     const protocol = isSecure ? 'wss' : 'ws';
     const fullUrl = `${protocol}://${ip}:${port}`;
@@ -874,7 +831,6 @@ function setupWebsocketSignaling(ip, port, isSecure) {
         logger.error('WebSocket encountered an error. Check if the server URL and port are correct.');
     };
 
-    // FIX: Properly handle early closes before RTCPeerConnection is initialized
     ws.onclose = (event) => {
         logger.info(`Signaling connection closed. Code: ${event.code}, Reason: ${event.reason || 'None'}`);
         if (!pc || (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed')) {
@@ -896,17 +852,12 @@ function setupWebsocketSignaling(ip, port, isSecure) {
     };
 }
 
-/**
- * Processes incoming WebSocket messages for Perfect Negotiation and application state.
- * @param {Object} msg - Parsed JSON signaling message
- */
 async function processSignalingMessage(msg) {
     switch (msg.type) {
         case 'role-assignment':
             polite = msg.polite;
             logger.info(`Role assigned by server. I am ${polite ? 'POLITE' : 'IMPOLITE'}.`);
 
-            // Both peers are now guaranteed to be connected. Initialize WebRTC!
             if (!pc) {
                 logger.info('Peer detected! Initializing P2P WebRTC connection...');
                 initializePeerConnection();
@@ -917,7 +868,6 @@ async function processSignalingMessage(msg) {
 
         case 'description':
             const description = msg.description;
-            // Perfect Negotiation Logic
             const offerCollision = (description.type === 'offer') && (makingOffer || (pc && pc.signalingState !== 'stable'));
             ignoreOffer = !polite && offerCollision;
 
@@ -938,7 +888,6 @@ async function processSignalingMessage(msg) {
                 await pc.setRemoteDescription(description);
             } catch(err) {
                 logger.error(`Failed to apply remote description: ${err.message}`);
-                // If it's an offer and we had a collision, we might need an explicit rollback
                 if (description.type === 'offer') {
                     await pc.setLocalDescription({ type: 'rollback' });
                     await pc.setRemoteDescription(description);
@@ -949,7 +898,6 @@ async function processSignalingMessage(msg) {
 
             isSettingRemoteAnswerPending = false;
 
-            // Flush delayed ICE candidates now that remote description is set
             if (pendingIceCandidates.length > 0) {
                 logger.info(`Flushing ${pendingIceCandidates.length} queued ICE candidates...`);
                 for (const candidate of pendingIceCandidates) {
@@ -995,7 +943,7 @@ async function processSignalingMessage(msg) {
                     duration: 8000
                 });
             }
-            disconnect(true); // Intentional reset due to server rejection
+            disconnect(true);
             break;
 
         case 'peer-disconnected':
@@ -1016,10 +964,6 @@ async function processSignalingMessage(msg) {
     }
 }
 
-/**
- * Handles incoming remote media streams via RTCPeerConnection.
- * @param {RTCTrackEvent} event
- */
 function processRemoteTrack(event) {
     const stream = event.streams[0];
     if (!stream) return logger.warn('Remote track event received without a valid stream object.');
@@ -1068,14 +1012,9 @@ function processRemoteTrack(event) {
     }
 }
 
-/**
- * Fully tears down the WebRTC connection, signaling, and resets the UI.
- * @param {boolean} isIntentional - True if the user clicked Disconnect
- */
 function disconnect(isIntentional = false) {
     logger.info(`Disconnect sequence initiated. (Intentional: ${isIntentional})`);
 
-    // Show notification only if it was a crash/loss
     if (!isIntentional && notifier && (pc || ws)) {
         notifier.show({
             position: 'nw', icon: 'error', title: 'Connection Lost',
@@ -1084,12 +1023,10 @@ function disconnect(isIntentional = false) {
         });
     }
 
-    // Clean up screen shares
     for (const streamId of activeScreenShares.keys()) {
         stopScreenShare(streamId, true);
     }
 
-    // Close WebRTC
     if (pc) {
         pc.onnegotiationneeded = null;
         pc.onicecandidate = null;
@@ -1099,7 +1036,6 @@ function disconnect(isIntentional = false) {
         logger.info('RTCPeerConnection destroyed.');
     }
 
-    // Close Signaling
     if (ws) {
         ws.onopen = null;
         ws.onclose = null;
@@ -1113,7 +1049,6 @@ function disconnect(isIntentional = false) {
         logger.info('WebSocket destroyed.');
     }
 
-    // Reset Remote Media
     remoteVideo.srcObject = null;
     remotePlaceholder.classList.add('active');
     remoteMuteIndicator.classList.remove('active');
@@ -1127,19 +1062,14 @@ function disconnect(isIntentional = false) {
         pianos.pianos[0].resetPeerMidiStatus();
     }
 
-    // Data Channels
     midiChannel = fileChannel = chatChannel = metronomeChannel = commonDataChannel = null;
 
     if (fileSharing) fileSharing.disable();
     if (chat) chat.disable();
 
-    // UI Reset - This MUST be called
     resetConnectionUI();
 }
 
-/**
- * Resets connection UI to its default offline state.
- */
 function resetConnectionUI() {
     startConnectionButton.disabled = false;
     startConnectionButton.style.backgroundColor = '#4CAF50';
@@ -1156,23 +1086,34 @@ function resetConnectionUI() {
     logger.debug('UI reset to disconnected state.');
 }
 
-// --- Data Channel Setup Logic ---
-
 function setupMidiChannel(channel) {
     channel.binaryType = 'arraybuffer';
-    channel.onopen = () => logger.info('MIDI DataChannel is OPEN.');
+    channel.onopen = () => logger.info('MIDI DataChannel is OPEN. SCTP Reliable transmission enabled.');
     channel.onclose = () => logger.info('MIDI DataChannel is CLOSED.');
     channel.onerror = (err) => logger.error(`MIDI DataChannel error: ${err.message}`);
 
     channel.onmessage = (event) => {
         const pianoInstance = pianos.pianos[0];
         if (pianoInstance && pianoInstance.opts.receiveMidi) {
-            const midiData = new Uint8Array(event.data);
-            pianos.getMIDIMessage({ data: midiData }, 'remote');
+            const buffer = new Uint8Array(event.data);
+            let offset = 0;
 
-            if (midiAccess && midiOutputSelect.value && midiOutputSelect.value !== 'none') {
-                const output = Array.from(midiAccess.outputs.values()).find(o => o.id === midiOutputSelect.value);
-                if (output) output.send(midiData);
+            while (offset < buffer.length) {
+                const len = buffer[offset++];
+                if (offset + len > buffer.length) {
+                    logger.error('Invalid MIDI batch payload received. Dropping remaining buffer to protect state.');
+                    break;
+                }
+
+                const midiData = buffer.slice(offset, offset + len);
+                offset += len;
+
+                pianos.getMIDIMessage({ data: midiData }, 'remote');
+
+                if (midiAccess && midiOutputSelect.value && midiOutputSelect.value !== 'none') {
+                    const output = Array.from(midiAccess.outputs.values()).find(o => o.id === midiOutputSelect.value);
+                    if (output) output.send(midiData);
+                }
             }
         }
     };
@@ -1270,8 +1211,6 @@ function setupFileChannel(channel) {
     if (channel.readyState === 'open') handleOpen(); else channel.onopen = handleOpen;
 }
 
-// --- Outbound Messages & Logic ---
-
 function sendSelfMuteStatus(isMuted) {
     if (commonDataChannel && commonDataChannel.readyState === 'open') {
         commonDataChannel.send(JSON.stringify({ type: 'self_mute_status', muted: isMuted }));
@@ -1306,14 +1245,6 @@ function sendMetronomeTick(tickData) {
     }
 }
 
-function sendMidiMessage(midiData) {
-    if (midiChannel && midiChannel.readyState === 'open' && midiChannel.bufferedAmount < MIDI_BUFFER_THRESHOLD) {
-        midiChannel.send(midiData.buffer);
-    }
-}
-
-// --- Screen Sharing ---
-
 async function startScreenShare() {
     if (!pc) return logger.error('Cannot start screen share: no active connection.');
     try {
@@ -1322,7 +1253,7 @@ async function startScreenShare() {
         const streamId = stream.id;
 
         let streamName = track.label;
-        if (!streamName || ["internal camera", "bildschirm", "screen"].includes(streamName.toLowerCase())) {
+        if (!streamName ||["internal camera", "bildschirm", "screen"].includes(streamName.toLowerCase())) {
             streamName = "Shared Content";
         }
 
@@ -1359,8 +1290,6 @@ function stopScreenShare(streamId, isInitiator) {
     activeScreenShares.delete(streamId);
     logger.info(`Screen share ${streamId} stopped.`);
 }
-
-// --- Event Listeners Integration ---
 
 function bindDeviceListeners() {
     navigator.mediaDevices.ondevicechange = async () => {
@@ -1405,7 +1334,7 @@ function bindVolumeListeners() {
     micVolumeIcon.addEventListener('click', () => {
         const isCurrentlyMuted = parseFloat(micVolume.value) === 0;
         micVolume.value = isCurrentlyMuted ? lastMicVolume : 0;
-        micVolume.dispatchEvent(new Event('input')); // Trigger logic implicitly
+        micVolume.dispatchEvent(new Event('input'));
     });
 
     remoteVolumeIcon.addEventListener('click', () => {
@@ -1471,13 +1400,9 @@ function setEventListeners() {
     bindFullscreenListeners();
 }
 
-/**
- * Initializes the entire application state, constructs modules, and boots AV devices.
- */
 async function init() {
     logger.info('Booting MidiCam application...');
 
-    // Web API checks
     if (!navigator.mediaDevices) {
         logger.error('navigator.mediaDevices is undefined. Check if you are on HTTPS.');
         if (notifier) notifier.show({ title: 'Environment Error', text: 'Media API not available. Ensure you are using HTTPS.', icon: 'error', duration: 10000 });
@@ -1519,7 +1444,6 @@ async function init() {
         logger.error(`Failed to create AudioContext: ${e.message}`);
     }
 
-    // --- SYNCHRONOUS UI INIT (Non-Blocking) ---
     lastMicVolume = micVolume.value;
     lastRemoteVolume = remoteVolume.value;
     isSelfMuted = parseFloat(micVolume.value) === 0;
@@ -1574,11 +1498,8 @@ async function init() {
     loadSettings();
     logger.info('MidiCam basic UI sequence complete. Handing over to hardware discovery...');
 
-    // --- ASYNCHRONOUS HARDWARE BOOT (Parallel & Timeout-Safe) ---
-    // These run in the background. If OBS crashes the request, the UI remains perfectly usable.
     setupMedia().catch(e => logger.error(`setupMedia unhandled exception: ${e.message}`));
     setupMidi().catch(e => logger.error(`setupMidi unhandled exception: ${e.message}`));
 }
 
-// --- Bootstrap ---
 init();

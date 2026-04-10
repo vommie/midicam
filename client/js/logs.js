@@ -23,12 +23,15 @@ export class Log {
         }
 
         this.isVisible = false;
-        this.allEntries = [];
+        this.allEntries =[];
         this.currentSearchTerm = '';
         this.currentLevelFilter = 'all';
 
         this.logLevels = { 'error': 4, 'warn': 3, 'info': 2, 'debug': 1 };
         this.verbosityLevel = 'info';
+
+        this.pendingLogs =[];
+        this.logUpdateQueued = false;
 
         this._loadSettings();
         this._initEventListeners();
@@ -119,7 +122,7 @@ export class Log {
                             }
                         }
                     ],
-                    onClose: (reason) => {
+                    onClose: () => {
                         if (this.verbositySelector.value === 'debug' && this.verbosityLevel !== 'debug') {
                              this.verbositySelector.value = oldLevel;
                         }
@@ -168,6 +171,7 @@ export class Log {
 
     _applyFilters() {
         this.allEntries.forEach(entry => {
+            if (!entry.element) return;
             const searchMatch = entry.message.toLowerCase().includes(this.currentSearchTerm);
             const levelMatch = this.currentLevelFilter === 'all' || entry.level === this.currentLevelFilter;
 
@@ -211,50 +215,68 @@ export class Log {
             return;
         }
 
+        const entry = {
+            level,
+            message,
+            timestamp: new Date(),
+            element: null
+        };
+
+        this.allEntries.push(entry);
+        this.pendingLogs.push(entry);
+
+        if (!this.logUpdateQueued) {
+            this.logUpdateQueued = true;
+            requestAnimationFrame(() => this._flushLogs());
+        }
+    }
+
+    _flushLogs() {
+        this.logUpdateQueued = false;
+        if (!this.logContainer) return;
+
         const isScrolledToBottom = this.logContainer.scrollHeight - this.logContainer.scrollTop <= this.logContainer.clientHeight + 20;
+        const fragment = document.createDocumentFragment();
 
-        const timestamp = new Date();
-        const entryElement = document.createElement('div');
-        entryElement.className = `log-entry ${level}`;
+        this.pendingLogs.forEach(entry => {
+            const entryElement = document.createElement('div');
+            entryElement.className = `log-entry ${entry.level}`;
 
-        const displayedTimestamp = timestamp.toLocaleTimeString('de-DE', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            const displayedTimestamp = entry.timestamp.toLocaleTimeString('de-DE', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+
+            entryElement.innerHTML = `
+                <span class="timestamp">${displayedTimestamp}</span>
+                <span class="level">${entry.level.toUpperCase()}</span>
+                <span class="message">${entry.message}</span>
+            `;
+
+            const searchMatch = entry.message.toLowerCase().includes(this.currentSearchTerm);
+            const levelMatch = this.currentLevelFilter === 'all' || entry.level === this.currentLevelFilter;
+
+            if (!searchMatch || !levelMatch) {
+                entryElement.classList.add('hidden');
+            }
+
+            entry.element = entryElement;
+            fragment.appendChild(entryElement);
         });
 
-        entryElement.innerHTML = `
-            <span class="timestamp">${displayedTimestamp}</span>
-            <span class="level">${level.toUpperCase()}</span>
-            <span class="message">${message}</span>
-        `;
+        this.logContainer.appendChild(fragment);
+        this.pendingLogs = [];
 
-        this.allEntries.push({ level, message, timestamp, element: entryElement });
-
-        const searchMatch = message.toLowerCase().includes(this.currentSearchTerm);
-        const levelMatch = this.currentLevelFilter === 'all' || level === this.currentLevelFilter;
-        if (!searchMatch || !levelMatch) {
-            entryElement.classList.add('hidden');
+        while (this.logContainer.children.length > 500) {
+            this.logContainer.removeChild(this.logContainer.firstChild);
         }
-
-        this.logContainer.appendChild(entryElement);
 
         if (isScrolledToBottom) {
             this.logContainer.scrollTop = this.logContainer.scrollHeight;
         }
     }
 
-    info(message) {
-        this._add('info', message);
-    }
-
-    warn(message) {
-        this._add('warn', message);
-    }
-
-    debug(message) {
-        this._add('debug', message);
-    }
-
-    error(message) {
-        this._add('error', message);
-    }
+    info(message) { this._add('info', message); }
+    warn(message) { this._add('warn', message); }
+    debug(message) { this._add('debug', message); }
+    error(message) { this._add('error', message); }
 }

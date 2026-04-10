@@ -4,7 +4,7 @@ class Pianos {
 
     constructor() {
         this.midiEnabled = false;
-        this.pianos = [];
+        this.pianos =[];
         this.keys = this.createKeys();
         this.logger = {
             info: () => {},
@@ -179,12 +179,9 @@ class Pianos {
         return true;
     }
 
-    /**
-     * Creates all 88 keys with their specifications
-     */
     createKeys() {
         let keys = {}, octave = 0;
-        const blackKeyIndexes = [0, 2, 5, 7, 10];
+        const blackKeyIndexes =[0, 2, 5, 7, 10];
         for(let i = 1; i <= 88; i++) {
             let keyIndex = i%12;
             keys[i] = this.createKey(octave, (octave * 12) + (i+8)%12, blackKeyIndexes.includes(keyIndex));
@@ -193,12 +190,6 @@ class Pianos {
         return keys;
     }
 
-    /**
-     * Creates a single key
-     * @param {int} octave
-     * @param {int} pitch
-     * @param {bool} isBlack
-     */
     createKey(octave, pitch, isBlack) {
         let key = {};
         if(octave === parseInt(octave, 10) && octave >= 0 && octave < 9) key.octave = octave;
@@ -207,7 +198,6 @@ class Pianos {
         key.isBlack = isBlack;
         return key;
     }
-
 }
 
 class Piano {
@@ -221,18 +211,23 @@ class Piano {
 
         this.boxShadows = {};
         this.scaleFactor = 1;
-        this.sustainedKeyIds = [];
-        this.pressedKeys = [];
+        this.sustainedKeyIds =[];
+        this.pressedKeys =[];
         this.soundPlayer = new SoundPlayer();
         if(this.opts.undampedStrings.length > 1) this.opts.undampedStrings = this.getUndampedStringsRangeNotes(this.opts.undampedStrings[0], this.opts.undampedStrings[1]);
 
         this.logger.info(`Creating new Piano (ID: ${this.id})`);
         this.logger.debug(`Piano ${this.id} created with options: ${JSON.stringify(this.opts)}`);
 
+        this.pedalStates = { soft: false, sostenuto: false, sustain: false };
+        this.pendingVisualUpdates = new Map();
+        this.pendingPedalUpdates = new Map();
+        this.visualFrameRequested = false;
+
         this.templates = this.getTemplates();
         this.elements = {};
         this.elements.piano = this.insertPiano();
-        this.elements.keys = [];
+        this.elements.keys =[];
         this.elements.pedals = this.initPedalElements();
 
         if (this.opts.height) {
@@ -248,6 +243,51 @@ class Piano {
         if(!opts.noScale === true) this.handleResize();
         this.initResizing();
         this.sendMidiMessage = this.opts.sendMidiMessage || (() => {});
+    }
+
+    queueVisualUpdate(keyId, velocity, src, state) {
+        this.pendingVisualUpdates.set(keyId, { velocity, src, state });
+        if (!this.visualFrameRequested) {
+            this.visualFrameRequested = true;
+            requestAnimationFrame(() => this.applyVisualUpdates());
+        }
+    }
+
+    queuePedalVisualUpdate(pedalName, state, src) {
+        this.pendingPedalUpdates.set(pedalName, { state, src });
+        if (!this.visualFrameRequested) {
+            this.visualFrameRequested = true;
+            requestAnimationFrame(() => this.applyVisualUpdates());
+        }
+    }
+
+    applyVisualUpdates() {
+        this.visualFrameRequested = false;
+
+        this.pendingVisualUpdates.forEach((data, keyId) => {
+            const keyElement = this.elements.keys[keyId];
+            if (!keyElement) return;
+            if (data.state === 'on') {
+                this.addKeyPressedStyle(keyElement, data.velocity, data.src);
+            } else {
+                this.removeKeyPressedStyle(keyElement);
+            }
+        });
+        this.pendingVisualUpdates.clear();
+
+        this.pendingPedalUpdates.forEach((data, pedalName) => {
+            const pedalElement = this.elements.pedals[pedalName];
+            if (!pedalElement) return;
+
+            if (data.state) {
+                pedalElement.classList.add('active', data.src);
+                if (pedalName === 'soft') this.elements.piano.container.classList.add('soft');
+            } else {
+                pedalElement.classList.remove('active', 'local', 'remote');
+                if (pedalName === 'soft') this.elements.piano.container.classList.remove('soft');
+            }
+        });
+        this.pendingPedalUpdates.clear();
     }
 
     updateDynamicStyles() {
@@ -602,14 +642,6 @@ class Piano {
         return elements;
     }
 
-    /**
-     * Gets the name of a key based on it's ID
-     *
-     * @param {int} id The id of the key
-     * @param {bool} includeOctave If true, the octave is included in the key name.
-     * @param {string} accidental "flat" or "major". If not provided, both accidentals get returned separeted by a slash character.
-     * @param {bool} useUnicodeAccidental If true, the accidentals are "♯" and "♭" instead of "#"" and "b".
-     */
     getKeyName(id, includeOctave = false, accidental = false, useUnicodeAccidental = true) {
         const noteNames = { 1: 'A', 3: 'B', 4: 'C', 6: 'D', 8: 'E', 9: 'F', 11: 'G' };
         let keyIndex = id%12;
@@ -643,7 +675,7 @@ class Piano {
 
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
-            this.addKeyPressedStyle(keyElement, velocity, src);
+            this.queueVisualUpdate(keyId, velocity, src, 'on');
             if (this.pressedKeys.indexOf(keyElement.dataset.id) === -1) {
                 this.pressedKeys.push(keyElement.dataset.id);
             }
@@ -658,7 +690,7 @@ class Piano {
 
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
-            this.removeKeyPressedStyle(keyElement);
+            this.queueVisualUpdate(keyId, 0, src, 'off');
             const index = this.pressedKeys.indexOf(keyElement.dataset.id);
             if (index > -1) {
                 this.pressedKeys.splice(index, 1);
@@ -675,7 +707,7 @@ class Piano {
         if (!this.isKeyInRange(id)) return;
 
         this.lastKeyId = id;
-        this.addKeyPressedStyle(this.elements.keys[id]);
+        this.queueVisualUpdate(id, 127, 'local', 'on');
         this.playNote(id);
         if (this.opts.sendMidi) {
             this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
@@ -687,7 +719,7 @@ class Piano {
         let id = e.currentTarget.dataset.id;
         if (!this.isKeyInRange(id)) return;
 
-        this.removeKeyPressedStyle(this.elements.keys[id]);
+        this.queueVisualUpdate(id, 0, 'local', 'off');
         this.stopNote(id);
         if (this.opts.sendMidi) {
             this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
@@ -699,17 +731,19 @@ class Piano {
         let id = e.currentTarget.dataset.id;
         if (!this.isKeyInRange(id)) return;
         if (id == this.lastKeyId) return;
-        this.removeKeyPressedStyle(this.elements.keys[this.lastKeyId]);
+
+        this.queueVisualUpdate(this.lastKeyId, 0, 'local', 'off');
         this.stopNote(this.lastKeyId);
         if (this.opts.sendMidi) {
             this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
         }
+
         this.lastKeyId = id;
         this.playNote(id);
         if (this.opts.sendMidi) {
             this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
         }
-        this.addKeyPressedStyle(this.elements.keys[id]);
+        this.queueVisualUpdate(id, 127, 'local', 'on');
     }
 
     addMouseHandling() {
@@ -728,7 +762,7 @@ class Piano {
     stopNote(id) {
         const keyName = this.getKeyName(id, true, 'major', false);
         if(this.opts.undampedStrings.includes(keyName)) return;
-        if(this.elements.pedals.sustain.classList.contains('active')) {
+        if(this.pedalStates.sustain) {
             if(this.sustainedKeyIds.indexOf(id) === -1)  this.sustainedKeyIds.push(id);
             return;
         }
@@ -810,20 +844,15 @@ class Piano {
 
         let activate;
         if (src === 'local') {
-            activate = !this.elements.pedals.soft.classList.contains('active');
+            activate = !this.pedalStates.soft;
             if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 67, activate ? 127 : 0]));
         } else {
             if (!this.opts.receiveMidi) return;
             activate = state;
         }
 
-        if(activate) {
-            this.elements.pedals.soft.classList.add('active', src);
-            this.elements.piano.container.classList.add('soft');
-        } else {
-            this.elements.pedals.soft.classList.remove('active', 'local', 'remote');
-            this.elements.piano.container.classList.remove('soft');
-        }
+        this.pedalStates.soft = activate;
+        this.queuePedalVisualUpdate('soft', activate, src);
     }
 
     sostenutoPedal(state, src='local') {
@@ -831,18 +860,15 @@ class Piano {
 
         let activate;
         if (src === 'local') {
-            activate = !this.elements.pedals.sostenuto.classList.contains('active');
+            activate = !this.pedalStates.sostenuto;
             if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 66, activate ? 127 : 0]));
         } else {
             if (!this.opts.receiveMidi) return;
             activate = state;
         }
 
-        if(activate) {
-            this.elements.pedals.sostenuto.classList.add('active', src);
-        } else {
-            this.elements.pedals.sostenuto.classList.remove('active', 'local', 'remote');
-        }
+        this.pedalStates.sostenuto = activate;
+        this.queuePedalVisualUpdate('sostenuto', activate, src);
     }
 
     sustainPedal(velocity, src='local') {
@@ -850,17 +876,17 @@ class Piano {
 
         let activate;
         if (src === 'local' && velocity === null) {
-            activate = !this.elements.pedals.sustain.classList.contains('active');
+            activate = !this.pedalStates.sustain;
             if (this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 64, activate ? 127 : 0]));
         } else {
             if (src === 'remote' && !this.opts.receiveMidi) return;
             activate = velocity > 0;
         }
 
-        if (activate) {
-            this.elements.pedals.sustain.classList.add('active', src);
-        } else {
-            this.elements.pedals.sustain.classList.remove('active', 'local', 'remote');
+        this.pedalStates.sustain = activate;
+        this.queuePedalVisualUpdate('sustain', activate, src);
+
+        if (!activate) {
             this.sustainedKeyIds.forEach(id => {
                 if(this.pressedKeys.includes(id)) return;
                 this.stopNote(id);
@@ -868,7 +894,7 @@ class Piano {
                     this.sendMidiMessage(new Uint8Array([128, parseInt(id) + 20, 0]));
                 }
             });
-            this.sustainedKeyIds = [];
+            this.sustainedKeyIds =[];
         }
     }
 
@@ -900,20 +926,14 @@ class Piano {
         }
     }
 
-    /**
-     * Creates a range of note names based on a given start and end note.
-     *
-     * @param {string} startNote The starting note
-     * @param {string} endNote The end note
-     */
     getUndampedStringsRangeNotes(startNote, endNote) {
-        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const notes =['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
         const startOctave = parseInt(startNote.substring(1));
         const endOctave = parseInt(endNote.substring(1));
         const startNoteIndex = notes.indexOf(startNote.substring(0, 1));
         const endNoteIndex = notes.indexOf(endNote.substring(0, 1));
 
-        let result = [];
+        let result =[];
         for(let i = startOctave; i <= endOctave; i++) {
             for(let j = (i === startOctave ? startNoteIndex : 0); j < notes.length; j++) {
                 if(i === endOctave && j > endNoteIndex) break;
@@ -948,7 +968,6 @@ class Piano {
         if (receiveLed) receiveLed.classList.remove('warning');
         if (sendLed) sendLed.classList.remove('warning');
     }
-
 }
 
 export {
