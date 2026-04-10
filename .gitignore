@@ -10,3 +10,5 @@ nfo/
 src/vendor-composer/
 dist/
 schema.png
+prompts.txt
+build/
