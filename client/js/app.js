@@ -11,6 +11,8 @@ import { Dialog } from './dialog.js';
 import { Notifications } from './notifications.js';
 import { Effects } from './effects.js';
 import { MidiCamDB } from './db.js';
+import { MidiDiagnostics } from './midiDiagnostics.js';
+import { BackgroundTimer } from './backgroundTimer.js';
 
 // --- Logger Initialization ---
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
@@ -34,6 +36,7 @@ const toggleMetronomeButton = document.getElementById('toggleMetronome');
 const metronomeContainer = document.getElementById('metronomeContainer');
 const shareScreenButton = document.getElementById('shareScreenButton');
 const additionalStreamsContainer = document.getElementById('additionalStreamsContainer');
+const showMidiDiagnosticsButton = document.getElementById('showMidiDiagnosticsButton');
 
 // --- Global State & WebRTC Variables ---
 let pc = null;
@@ -44,6 +47,8 @@ let gainNode = null;
 let currentVideoId = 'none';
 let currentAudioId = 'none';
 let midiAccess = null;
+let midiDiagnostics = null;
+let pingInterval = null;
 
 // --- Data Channels ---
 let midiChannel = null;
@@ -86,6 +91,7 @@ const VIDEO_QUALITY = {
 
 // --- Instances ---
 const pianos = new Pianos();
+const bgTimer = new BackgroundTimer();
 let metronome = null;
 let chat = null;
 let notifier = null;
@@ -528,44 +534,53 @@ async function connectMidi() {
 }
 
 function queueMidiForNetwork(midiDataUint8) {
-    if (!midiChannel || midiChannel.readyState !== 'open') return;
     midiOutBuffer.push(midiDataUint8);
 
-    if (!midiOutQueued) {
+    if (midiDiagnostics.settings.flushMode === 'immediate') {
+        flushMidiBuffer(); // Immediate execution
+    } else if (!midiOutQueued) {
         midiOutQueued = true;
-        queueMicrotask(flushMidiBuffer);
+        queueMicrotask(flushMidiBuffer); // Batching execution
     }
 }
 
 function flushMidiBuffer() {
     midiOutQueued = false;
+    if (midiOutBuffer.length === 0) return;
 
-    if (midiChannel.bufferedAmount > MIDI_BUFFER_THRESHOLD) {
-        logger.warn(`MIDI drop: High WebRTC buffer (${midiChannel.bufferedAmount} bytes). Avoid spamming network.`);
-        midiOutBuffer = [];
-        return;
+    // Calculate total size: 8 (Timestamp) + 2 (Sequence) + payloads
+    let payloadSize = 0;
+    for (let i = 0; i < midiOutBuffer.length; i++) {
+        payloadSize += 1 + midiOutBuffer[i].length;
     }
 
-    let totalSize = 0;
-    for (let i = 0; i < midiOutBuffer.length; i++) {
-        totalSize += 1 + midiOutBuffer[i].length;
-    }
+    const buffer = new ArrayBuffer(10 + payloadSize);
+    const view = new DataView(buffer);
+    const uint8View = new Uint8Array(buffer);
 
-    const payload = new Uint8Array(totalSize);
-    let offset = 0;
+    // Write Header
+    view.setFloat64(0, performance.now(), true); // true = little-endian
+    view.setUint16(8, midiDiagnostics.trackSend(), true);
+
+    // Write Payload
+    let offset = 10;
     for (let i = 0; i < midiOutBuffer.length; i++) {
-        payload[offset++] = midiOutBuffer[i].length;
-        payload.set(midiOutBuffer[i], offset);
+        uint8View[offset++] = midiOutBuffer[i].length;
+        uint8View.set(midiOutBuffer[i], offset);
         offset += midiOutBuffer[i].length;
     }
 
     try {
-        midiChannel.send(payload.buffer);
+        if (midiDiagnostics.settings.transport === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(buffer); // Binary WebSocket send
+        } else if (midiChannel && midiChannel.readyState === 'open') {
+            midiChannel.send(buffer);
+        }
     } catch (e) {
-        logger.error(`Failed to send MIDI batch: ${e.message}`);
+        midiDiagnostics.logDebug(`Failed to send MIDI: ${e.message}`);
     }
 
-    midiOutBuffer = [];
+    midiOutBuffer =[];
 }
 
 function sendMidiMessage(midiData) {
@@ -755,6 +770,13 @@ function handleIceConnectionStateChange() {
             startConnectionButton.innerHTML = 'Disconnect';
             serverUrlInput.disabled = true;
             updateVideoEncodingParameters(false);
+            if (!pingInterval) {
+                pingInterval = setInterval(() => {
+                    if (commonDataChannel && commonDataChannel.readyState === 'open') {
+                        midiDiagnostics.measurePing((msg) => commonDataChannel.send(JSON.stringify(msg)));
+                    }
+                }, 2000);
+            }
             break;
         case 'disconnected':
             logger.warn('ICE connection disconnected. Potential network disruption.');
@@ -782,7 +804,11 @@ function addLocalTracksToPeer() {
 }
 
 function initializeDataChannels() {
-    midiChannel = pc.createDataChannel('midiChannel', { ordered: true });
+    const midiOpts = midiDiagnostics.settings.transport === 'webrtc_unordered'
+        ? { ordered: false, maxRetransmits: 0 }
+        : { ordered: true };
+
+    midiChannel = pc.createDataChannel('midiChannel', midiOpts);
     setupMidiChannel(midiChannel);
 
     fileChannel = pc.createDataChannel('fileChannel', { ordered: true });
@@ -858,6 +884,12 @@ function setupWebsocketSignaling(ip, port, isSecure) {
     };
 
     ws.onmessage = async (event) => {
+        if (event.data instanceof Blob) {
+            const arrayBuffer = await event.data.arrayBuffer();
+            handleIncomingMidiBuffer(arrayBuffer);
+            return;
+        }
+
         try {
             const msg = JSON.parse(event.data);
             if (msg.type !== 'candidate') logger.debug(`Signaling msg received: ${msg.type}`);
@@ -1085,6 +1117,8 @@ function disconnect(isIntentional = false) {
     if (fileSharing) fileSharing.disable();
     if (chat) chat.disable();
 
+    clearInterval(pingInterval);
+
     resetConnectionUI();
 }
 
@@ -1106,35 +1140,76 @@ function resetConnectionUI() {
 
 function setupMidiChannel(channel) {
     channel.binaryType = 'arraybuffer';
-    channel.onopen = () => logger.info('MIDI DataChannel is OPEN. SCTP Reliable transmission enabled.');
-    channel.onclose = () => logger.info('MIDI DataChannel is CLOSED.');
+    channel.onopen = () => logger.info(`MIDI DataChannel OPEN (${midiDiagnostics.settings.transport}).`);
+    channel.onclose = () => logger.info('MIDI DataChannel CLOSED.');
     channel.onerror = (err) => logger.error(`MIDI DataChannel error: ${err.message}`);
 
     channel.onmessage = (event) => {
-        const pianoInstance = pianos.pianos[0];
-        if (pianoInstance && pianoInstance.opts.receiveMidi) {
-            const buffer = new Uint8Array(event.data);
-            let offset = 0;
-
-            while (offset < buffer.length) {
-                const len = buffer[offset++];
-                if (offset + len > buffer.length) {
-                    logger.error('Invalid MIDI batch payload received. Dropping remaining buffer to protect state.');
-                    break;
-                }
-
-                const midiData = buffer.slice(offset, offset + len);
-                offset += len;
-
-                pianos.getMIDIMessage({ data: midiData }, 'remote');
-
-                if (midiAccess && midiOutputSelect.value && midiOutputSelect.value !== 'none') {
-                    const output = Array.from(midiAccess.outputs.values()).find(o => o.id === midiOutputSelect.value);
-                    if (output) output.send(midiData);
-                }
-            }
-        }
+        handleIncomingMidiBuffer(event.data);
     };
+}
+
+function applyNewMidiTransport(settings) {
+    logger.info(`Applying new MIDI transport settings: ${settings.transport}`);
+    if (settings.transport === 'websocket') {
+        logger.info("MIDI mapped to WebSocket fallback.");
+        return; // Handled directly in sendMidiMessage
+    }
+
+    if (pc && pc.connectionState === 'connected') {
+        if (midiChannel) midiChannel.close();
+
+        // Define connection properties based on selection
+        const options = settings.transport === 'webrtc_unordered'
+            ? { ordered: false, maxRetransmits: 0 } // UDP-Like (Best for Time)
+            : { ordered: true };                    // TCP-Like (Best for reliability)
+
+        midiChannel = pc.createDataChannel('midiChannel', options);
+        setupMidiChannel(midiChannel);
+
+        // Trigger renegotiation for the new channel
+        pc.onnegotiationneeded();
+    }
+}
+
+function handleIncomingMidiBuffer(arrayBuffer) {
+    if (arrayBuffer.byteLength < 10) return; // Invalid packet
+
+    const view = new DataView(arrayBuffer);
+    const uint8View = new Uint8Array(arrayBuffer);
+
+    const sendTimestamp = view.getFloat64(0, true);
+    const sequenceNum = view.getUint16(8, true);
+
+    midiDiagnostics.trackReceive(sendTimestamp, sequenceNum);
+
+    const pianoInstance = pianos.pianos[0];
+    if (!pianoInstance || !pianoInstance.opts.receiveMidi) return;
+
+    const delay = midiDiagnostics.getEffectiveJitter();
+    if (delay > 0) {
+        bgTimer.setTimeout(() => extractAndPlayMidi(uint8View, 10), delay);
+    } else {
+        extractAndPlayMidi(uint8View, 10);
+    }
+}
+
+function extractAndPlayMidi(uint8View, startOffset) {
+    let offset = startOffset;
+    while (offset < uint8View.length) {
+        const len = uint8View[offset++];
+        if (offset + len > uint8View.length) break; // corrupted
+
+        const midiData = uint8View.slice(offset, offset + len);
+        offset += len;
+
+        pianos.getMIDIMessage({ data: midiData }, 'remote');
+
+        if (midiAccess && midiOutputSelect.value && midiOutputSelect.value !== 'none') {
+            const output = Array.from(midiAccess.outputs.values()).find(o => o.id === midiOutputSelect.value);
+            if (output) output.send(midiData);
+        }
+    }
 }
 
 function setupChatChannel(channel) {
@@ -1180,6 +1255,15 @@ function setupCommonDataChannel(channel) {
                 case 'mute_status':
                     logger.info(`Peer ${msg.muted ? 'muted' : 'unmuted'} you on their side.`);
                     camLocalDrag.floatingWindow.setPeerMutedMeIndicatorActive(msg.muted);
+                    break;
+                case 'midi_diag_sync':
+                    midiDiagnostics.handleRemoteSync(msg.stats);
+                    break;
+                case 'ping':
+                    channel.send(JSON.stringify({ type: 'pong', id: msg.id }));
+                    break;
+                case 'pong':
+                    midiDiagnostics.handlePingReply(msg.id);
                     break;
             }
         } catch (err) { logger.error(`Error parsing Common DataChannel message: ${err.message}`); }
@@ -1427,6 +1511,16 @@ function setEventListeners() {
 
 async function init() {
     logger.info('Booting MidiCam application...');
+
+    midiDiagnostics = new MidiDiagnostics({
+        logger: logger,
+        applyMidiSettings: (settings) => applyNewMidiTransport(settings),
+        sendSyncData: (data) => {
+            if (commonDataChannel && commonDataChannel.readyState === 'open') {
+                commonDataChannel.send(JSON.stringify(data));
+            }
+        }
+    });
 
     db = new MidiCamDB(logger);
     await db.init();

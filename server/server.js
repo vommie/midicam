@@ -4,7 +4,6 @@ const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080 });
 let clients =[];
 
-// Reduced heartbeat to 10 seconds to quickly clear out ghost connections
 const heartbeatInterval = setInterval(() => {
     wss.clients.forEach((ws) => {
         if (ws.isAlive === false) {
@@ -25,10 +24,7 @@ wss.on('connection', (ws, req) => {
 
     if (clients.length >= 2) {
         console.log(`Rejected new connection from ${clientIp}: Session full (max 2).`);
-        ws.send(JSON.stringify({
-            type: 'error',
-            message: 'Maximum participants reached. Signaling blocked. If a previous connection dropped, please wait 10 seconds and try again.'
-        }));
+        ws.send(JSON.stringify({ type: 'error', message: 'Maximum participants reached.' }));
         ws.close();
         return;
     }
@@ -43,26 +39,19 @@ wss.on('connection', (ws, req) => {
         clients[1].ws.send(JSON.stringify({ type: 'role-assignment', polite: true }));
     }
 
-    ws.on('message', (message) => {
-        let msg;
-        try { msg = JSON.parse(message); } catch (e) {
-            console.error('Failed to parse incoming message:', e);
-            return;
-        }
-
+    ws.on('message', (message, isBinary) => {
         // Broadcast to the other client
         clients.forEach((client) => {
             if (client.ws !== ws && client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(JSON.stringify(msg));
+                // Determine if it's binary (MIDI test over WS) or JSON (Signaling)
+                client.ws.send(message, { binary: isBinary });
             }
         });
     });
 
     ws.on('close', (code, reason) => {
-        console.log(`Client connection closed. Code: ${code}, Reason: ${reason}`);
+        console.log(`Client connection closed. Code: ${code}`);
         clients = clients.filter(c => c.ws !== ws);
-
-        console.log(`Remaining participants: ${clients.length}`);
         clients.forEach((client) => {
             if (client.ws.readyState === WebSocket.OPEN) {
                 client.ws.send(JSON.stringify({ type: 'peer-disconnected' }));
@@ -70,13 +59,8 @@ wss.on('connection', (ws, req) => {
         });
     });
 
-    ws.on('error', (error) => {
-        console.error('WebSocket error on server:', error);
-    });
+    ws.on('error', (error) => console.error('WebSocket error on server:', error));
 });
 
-wss.on('close', () => {
-    clearInterval(heartbeatInterval);
-});
-
+wss.on('close', () => clearInterval(heartbeatInterval));
 console.log('MidiCam Signaling Server running on port 8080.');

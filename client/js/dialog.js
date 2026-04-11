@@ -178,6 +178,11 @@ export class Dialog {
         const header = this.element.querySelector('.dialog-header');
         if (!header) return;
 
+        this.element.addEventListener('mousedown', () => {
+            if (typeof Dialog.zIndexCounter === 'undefined') Dialog.zIndexCounter = 100;
+            this.element.style.zIndex = ++Dialog.zIndexCounter;
+        });
+
         const dragStart = (e) => {
             if (e.button !== 0) return;
             e.preventDefault();
@@ -216,6 +221,10 @@ export class Dialog {
 
     show() {
         dialogManager.push(this);
+
+        if (typeof Dialog.zIndexCounter === 'undefined') Dialog.zIndexCounter = 100;
+        this.element.style.zIndex = ++Dialog.zIndexCounter;
+
         requestAnimationFrame(() => {
             if (this.overlayElement) this.overlayElement.classList.add('visible');
             this.element.classList.add('visible');
