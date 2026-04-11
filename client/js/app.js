@@ -322,6 +322,15 @@ function updateActiveMidiOutput() {
     }
 }
 
+function routeToLocalHardwareOutput(midiData) {
+    if (!activeMidiOutput) return;
+    try {
+        activeMidiOutput.send(midiData);
+    } catch (err) {
+        logger.error(`Failed to dispatch MIDI to hardware output: ${err.message}`);
+    }
+}
+
 function createAudioProcessingGraph(rawStream) {
     if (rawStream.getAudioTracks().length === 0) {
         gainNode = null;
@@ -608,6 +617,7 @@ function flushMidiBuffer() {
 }
 
 function sendMidiMessage(midiData) {
+    routeToLocalHardwareOutput(midiData);
     queueMidiForNetwork(midiData);
 }
 
@@ -615,13 +625,12 @@ function handleLocalMidiMessage(message) {
     const midiData = new Uint8Array(message.data);
     const pianoInstance = pianos.pianos[0];
 
+    routeToLocalHardwareOutput(midiData);
     if (pianoInstance && pianoInstance.opts.sendMidi) {
         queueMidiForNetwork(midiData);
     }
-
     pianos.getMIDIMessage(message, 'local');
 }
-
 
 async function updateVideoEncodingParameters(fullscreen = false) {
     if (!pc || pc.signalingState === 'closed') return;
@@ -1236,14 +1245,8 @@ function extractAndPlayMidi(uint8View, startOffset) {
 
     if (extractedMessages.length === 0) return;
 
-    if (activeMidiOutput) {
-        for (let i = 0; i < extractedMessages.length; i++) {
-            try {
-                activeMidiOutput.send(extractedMessages[i]);
-            } catch (err) {
-                logger.error(`Failed to dispatch MIDI to hardware: ${err.message}`);
-            }
-        }
+    for (let i = 0; i < extractedMessages.length; i++) {
+        routeToLocalHardwareOutput(extractedMessages[i]);
     }
 
     queueMicrotask(() => {
@@ -1252,7 +1255,6 @@ function extractAndPlayMidi(uint8View, startOffset) {
         }
     });
 }
-
 function setupChatChannel(channel) {
     const handleOpen = () => {
         logger.info('Chat DataChannel is OPEN.');
