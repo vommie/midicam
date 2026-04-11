@@ -47,6 +47,7 @@ let gainNode = null;
 let currentVideoId = 'none';
 let currentAudioId = 'none';
 let midiAccess = null;
+let activeMidiOutput = null;
 let midiDiagnostics = null;
 let pingInterval = null;
 
@@ -301,6 +302,26 @@ function populateMidiUI() {
     midiOutputSelect.value = settings?.midiOutputDeviceId && outputs.some(o => o.id === settings.midiOutputDeviceId) ? settings.midiOutputDeviceId : 'none';
 }
 
+function updateActiveMidiOutput() {
+    if (!midiAccess) {
+        activeMidiOutput = null;
+        return;
+    }
+
+    const outId = midiOutputSelect.value;
+    if (outId && outId !== 'none') {
+        activeMidiOutput = Array.from(midiAccess.outputs.values()).find(o => o.id === outId) || null;
+        if (activeMidiOutput) {
+            logger.info(`Cached active MIDI output hardware: ${activeMidiOutput.name}`);
+        } else {
+            logger.warn(`Selected MIDI output device not found. Hardware routing disabled.`);
+        }
+    } else {
+        activeMidiOutput = null;
+        logger.info(`MIDI output cleared or set to 'none'.`);
+    }
+}
+
 function createAudioProcessingGraph(rawStream) {
     if (rawStream.getAudioTracks().length === 0) {
         gainNode = null;
@@ -527,6 +548,9 @@ async function connectMidi() {
                 logger.warn('Selected MIDI input device not found in active devices.');
             }
         }
+
+        updateActiveMidiOutput();
+
         saveSettings();
     } catch (err) {
         logger.error(`MIDI connection error: ${err.message}`);
@@ -1196,20 +1220,37 @@ function handleIncomingMidiBuffer(arrayBuffer) {
 
 function extractAndPlayMidi(uint8View, startOffset) {
     let offset = startOffset;
+    const extractedMessages =[];
+
     while (offset < uint8View.length) {
         const len = uint8View[offset++];
-        if (offset + len > uint8View.length) break; // corrupted
+        if (offset + len > uint8View.length) {
+            logger.error('Corrupted MIDI packet received: length mismatch.');
+            break;
+        }
 
         const midiData = uint8View.slice(offset, offset + len);
+        extractedMessages.push(midiData);
         offset += len;
+    }
 
-        pianos.getMIDIMessage({ data: midiData }, 'remote');
+    if (extractedMessages.length === 0) return;
 
-        if (midiAccess && midiOutputSelect.value && midiOutputSelect.value !== 'none') {
-            const output = Array.from(midiAccess.outputs.values()).find(o => o.id === midiOutputSelect.value);
-            if (output) output.send(midiData);
+    if (activeMidiOutput) {
+        for (let i = 0; i < extractedMessages.length; i++) {
+            try {
+                activeMidiOutput.send(extractedMessages[i]);
+            } catch (err) {
+                logger.error(`Failed to dispatch MIDI to hardware: ${err.message}`);
+            }
         }
     }
+
+    queueMicrotask(() => {
+        for (let i = 0; i < extractedMessages.length; i++) {
+            pianos.getMIDIMessage({ data: extractedMessages[i] }, 'remote');
+        }
+    });
 }
 
 function setupChatChannel(channel) {
@@ -1407,7 +1448,12 @@ function bindDeviceListeners() {
     };
 
     midiSelect.addEventListener('change', () => { connectMidi(); saveSettings(); });
-    midiOutputSelect.addEventListener('change', saveSettings);
+
+    midiOutputSelect.addEventListener('change', () => {
+        updateActiveMidiOutput();
+        saveSettings();
+    });
+
     videoSelect.addEventListener('change', switchMedia);
     audioSelect.addEventListener('change', switchMedia);
 }
