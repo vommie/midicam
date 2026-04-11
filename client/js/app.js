@@ -13,6 +13,7 @@ import { Effects } from './effects.js';
 import { MidiCamDB } from './db.js';
 import { MidiDiagnostics } from './midiDiagnostics.js';
 import { BackgroundTimer } from './backgroundTimer.js';
+import { MINICodec } from './midi/mini.js';
 
 // --- Logger Initialization ---
 const logger = new Log({ toggleButtonSelector: '#toggleLogButton' });
@@ -77,11 +78,13 @@ let polite = false;
 let makingOffer = false;
 let ignoreOffer = false;
 let isSettingRemoteAnswerPending = false;
-let pendingIceCandidates = [];
+let pendingIceCandidates =[];
 
 // --- High Performance MIDI Variables ---
 let midiOutBuffer = [];
 let midiOutQueued = false;
+let miniPendingEvents = [];
+let miniChordTimer = null;
 
 // --- Constants ---
 const MIDI_BUFFER_THRESHOLD = 2048;
@@ -566,14 +569,42 @@ async function connectMidi() {
     }
 }
 
-function queueMidiForNetwork(midiDataUint8) {
-    midiOutBuffer.push(midiDataUint8);
-
+function triggerNetworkFlush() {
     if (midiDiagnostics.settings.flushMode === 'immediate') {
-        flushMidiBuffer(); // Immediate execution
+        flushMidiBuffer();
     } else if (!midiOutQueued) {
         midiOutQueued = true;
-        queueMicrotask(flushMidiBuffer); // Batching execution
+        queueMicrotask(flushMidiBuffer);
+    }
+}
+
+function flushMiniBuffer() {
+    miniChordTimer = null;
+    if (miniPendingEvents.length === 0) return;
+
+    try {
+        const miniWords = MINICodec.encode(miniPendingEvents);
+        logger.debug(`[MINI] Encoded ${miniPendingEvents.length} generic MIDI events into ${miniWords.length} MINI words.`);
+        miniWords.forEach(word => midiOutBuffer.push(word));
+    } catch (err) {
+        logger.error(`Error encoding MINI format: ${err.message}`);
+    }
+
+    miniPendingEvents =[];
+    triggerNetworkFlush();
+}
+
+function queueMidiForNetwork(midiDataUint8) {
+    if (midiDiagnostics.settings.payloadEncoding === 'mini') {
+        miniPendingEvents.push(Array.from(midiDataUint8));
+        if (!miniChordTimer) {
+            miniChordTimer = setTimeout(() => {
+                flushMiniBuffer();
+            }, midiDiagnostics.settings.chordWindowMs || 10);
+        }
+    } else {
+        midiOutBuffer.push(midiDataUint8);
+        triggerNetworkFlush();
     }
 }
 
@@ -581,22 +612,23 @@ function flushMidiBuffer() {
     midiOutQueued = false;
     if (midiOutBuffer.length === 0) return;
 
-    // Calculate total size: 8 (Timestamp) + 2 (Sequence) + payloads
+    // Calculate total size: 8 (Timestamp) + 2 (Sequence) + 1 (FormatIndicator) + payloads
     let payloadSize = 0;
     for (let i = 0; i < midiOutBuffer.length; i++) {
         payloadSize += 1 + midiOutBuffer[i].length;
     }
 
-    const buffer = new ArrayBuffer(10 + payloadSize);
+    const buffer = new ArrayBuffer(11 + payloadSize);
     const view = new DataView(buffer);
     const uint8View = new Uint8Array(buffer);
 
     // Write Header
     view.setFloat64(0, performance.now(), true); // true = little-endian
     view.setUint16(8, midiDiagnostics.trackSend(), true);
+    uint8View[10] = (midiDiagnostics.settings.payloadEncoding === 'mini') ? 1 : 0;
 
     // Write Payload
-    let offset = 10;
+    let offset = 11;
     for (let i = 0; i < midiOutBuffer.length; i++) {
         uint8View[offset++] = midiOutBuffer[i].length;
         uint8View.set(midiOutBuffer[i], offset);
@@ -1031,8 +1063,7 @@ async function processSignalingMessage(msg) {
 
         case 'peer-disconnected':
             logger.info('The remote peer has disconnected from the signaling server.');
-            if (notifier) notifier.show({ title: 'Peer left', text: 'The peer has disconnected.', icon: 'info' });
-            disconnect();
+            if (notifier) notifier.show({ title: 'Peer left', text: 'The peer has disconnected from signaling. P2P might still work.', icon: 'info' });
             break;
 
         case 'new-stream':
@@ -1206,13 +1237,14 @@ function applyNewMidiTransport(settings) {
 }
 
 function handleIncomingMidiBuffer(arrayBuffer) {
-    if (arrayBuffer.byteLength < 10) return; // Invalid packet
+    if (arrayBuffer.byteLength < 11) return;
 
     const view = new DataView(arrayBuffer);
     const uint8View = new Uint8Array(arrayBuffer);
 
     const sendTimestamp = view.getFloat64(0, true);
     const sequenceNum = view.getUint16(8, true);
+    const encodingFormat = uint8View[10];
 
     midiDiagnostics.trackReceive(sendTimestamp, sequenceNum);
 
@@ -1221,13 +1253,13 @@ function handleIncomingMidiBuffer(arrayBuffer) {
 
     const delay = midiDiagnostics.getEffectiveJitter();
     if (delay > 0) {
-        bgTimer.setTimeout(() => extractAndPlayMidi(uint8View, 10), delay);
+        bgTimer.setTimeout(() => extractAndPlayMidi(uint8View, 11, encodingFormat), delay);
     } else {
-        extractAndPlayMidi(uint8View, 10);
+        extractAndPlayMidi(uint8View, 11, encodingFormat);
     }
 }
 
-function extractAndPlayMidi(uint8View, startOffset) {
+function extractAndPlayMidi(uint8View, startOffset, encodingFormat) {
     let offset = startOffset;
     const extractedMessages =[];
 
@@ -1245,16 +1277,29 @@ function extractAndPlayMidi(uint8View, startOffset) {
 
     if (extractedMessages.length === 0) return;
 
-    for (let i = 0; i < extractedMessages.length; i++) {
-        routeToLocalHardwareOutput(extractedMessages[i]);
-    }
-
-    queueMicrotask(() => {
-        for (let i = 0; i < extractedMessages.length; i++) {
-            pianos.getMIDIMessage({ data: extractedMessages[i] }, 'remote');
+    if (encodingFormat === 1) {
+        try {
+            const standardMessages = MINICodec.decode(extractedMessages);
+            standardMessages.forEach(msg => {
+                playDecodedMessage(new Uint8Array(msg));
+            });
+        } catch(e) {
+            logger.error(`Decoding MINI framework failed: ${e.message}`);
         }
+    } else {
+        for (let i = 0; i < extractedMessages.length; i++) {
+            playDecodedMessage(extractedMessages[i]);
+        }
+    }
+}
+
+function playDecodedMessage(midiData) {
+    routeToLocalHardwareOutput(midiData);
+    queueMicrotask(() => {
+        pianos.getMIDIMessage({ data: midiData }, 'remote');
     });
 }
+
 function setupChatChannel(channel) {
     const handleOpen = () => {
         logger.info('Chat DataChannel is OPEN.');

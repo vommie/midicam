@@ -15,7 +15,9 @@ export class MidiDiagnostics {
             transport: 'webrtc_unordered',
             jitterBufferMs: 15,
             flushMode: 'immediate',
-            syncIntervalMs: 2000
+            syncIntervalMs: 2000,
+            payloadEncoding: 'standard',
+            chordWindowMs: 10
         };
 
         this.lastSeqReceived = -1;
@@ -84,6 +86,7 @@ export class MidiDiagnostics {
         this.dialog.show();
         this.bindDOMListeners();
         this.updateJitterDisabledState();
+        this.updateEncodingDisabledState();
         this.updateUIDisplay();
 
         this.dialog.options.onClose = () => {
@@ -120,6 +123,22 @@ export class MidiDiagnostics {
                             <option value="webrtc_ordered" title="TCP-like: Guarantees delivery and order. If a note gets lost, the stream halts until it is re-sent, causing rubber-banding." ${this.settings.transport === 'webrtc_ordered' ? 'selected' : ''}>WebRTC TCP-like (Best for Reliability)</option>
                             <option value="websocket" title="Uses the signaling server to relay notes instead of P2P. Very slow, only use if WebRTC fails." ${this.settings.transport === 'websocket' ? 'selected' : ''}>WebSocket (Fallback Relay)</option>
                         </select>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;"
+                         title="Payload Encoding defines the actual bits sent. MINI groups notes to eliminate arpeggio effect.">
+                        <label style="width: 140px; cursor: help; border-bottom: 1px dotted #888;">Payload Encoding:</label>
+                        <select id="diag-encoding" style="flex-grow:1;">
+                            <option value="standard" ${this.settings.payloadEncoding === 'standard' ? 'selected' : ''}>Standard MIDI Bytes</option>
+                            <option value="mini" ${this.settings.payloadEncoding === 'mini' ? 'selected' : ''}>MINI Format (Chord Combinadics)</option>
+                        </select>
+                    </div>
+
+                    <div id="chord-window-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px; transition: opacity 0.2s;"
+                         title="Time window to group notes into a single chord for MINI encoding.">
+                        <label style="width: 140px; cursor: help; border-bottom: 1px dotted #888;">Chord Window:</label>
+                        <input type="range" id="diag-chord-window" min="1" max="100" value="${this.settings.chordWindowMs}" style="flex-grow:1;">
+                        <span id="diag-chord-val" style="width:55px; text-align:right; font-family: monospace;">${this.settings.chordWindowMs}ms</span>
                     </div>
 
                     <div id="jitter-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px; transition: opacity 0.2s;"
@@ -170,10 +189,18 @@ export class MidiDiagnostics {
         const jitterEl = document.getElementById('diag-jitter');
         const jitterVal = document.getElementById('diag-jitter-val');
         const flushEl = document.getElementById('diag-flush');
+        const encEl = document.getElementById('diag-encoding');
+        const chordEl = document.getElementById('diag-chord-window');
+        const chordVal = document.getElementById('diag-chord-val');
 
         transEl.onchange = () => {
             this.settings.transport = transEl.value;
             this.updateJitterDisabledState();
+            this.saveSettings();
+        };
+        encEl.onchange = () => {
+            this.settings.payloadEncoding = encEl.value;
+            this.updateEncodingDisabledState();
             this.saveSettings();
         };
         flushEl.onchange = () => {
@@ -185,6 +212,21 @@ export class MidiDiagnostics {
             jitterVal.textContent = `${this.settings.jitterBufferMs}ms`;
             this.saveSettings();
         };
+        chordEl.oninput = () => {
+            this.settings.chordWindowMs = parseInt(chordEl.value);
+            chordVal.textContent = `${this.settings.chordWindowMs}ms`;
+            this.saveSettings();
+        };
+    }
+
+    updateEncodingDisabledState() {
+        const chordEl = document.getElementById('diag-chord-window');
+        const container = document.getElementById('chord-window-container');
+        if (!chordEl || !container) return;
+
+        const isMini = this.settings.payloadEncoding === 'mini';
+        chordEl.disabled = !isMini;
+        container.style.opacity = isMini ? '1' : '0.4';
     }
 
     updateJitterDisabledState() {
