@@ -83,7 +83,7 @@ export class MINICodec {
             if (ctrlCode !== -1) {
                 const buf = new Uint8Array(2);
                 // SizeCode = 000 (Controller message)
-                buf[0] = (ctrlCode & 0x07) << 2; // [000][ctrl:3] [pad:2]
+                buf[0] = (ctrlCode & 0x1F); // [000][ctrl:5]
                 // Pitch bend maps 14 bit to 7 bit (MSB). Program Change is in data1, others in data2.
                 buf[1] = cmd === 192 ? (ctrl[1] & 0x7F) : (ctrl[2] & 0x7F);
                 miniWords.push(buf);
@@ -162,7 +162,11 @@ export class MINICodec {
             91: 4, // Reverb
             93: 5, // Chorus
             64: 6, // Sustain
-            66: 7  // Sostenuto
+            66: 7, // Sostenuto
+            67: 8, // Soft Pedal
+            120: 9, // All Sound Off
+            121: 10, // Reset Controllers
+            123: 11  // All Notes Off
         };
         return map[data1] !== undefined ? map[data1] : -1;
     }
@@ -179,7 +183,7 @@ export class MINICodec {
 
             if (sizeCode === 0) {
                 // Controllers
-                const ctrlCode = (buf[0] >> 2) & 0x07;
+                const ctrlCode = buf[0] & 0x1F;
                 const value = buf[1] & 0x7F;
 
                 if (ctrlCode === 0) { // Program Change
@@ -237,7 +241,11 @@ export class MINICodec {
             4: 91, // Reverb
             5: 93, // Chorus
             6: 64, // Sustain
-            7: 66  // Sostenuto
+            7: 66, // Sostenuto
+            8: 67, // Soft Pedal
+            9: 120, // All Sound Off
+            10: 121, // Reset Controllers
+            11: 123  // All Notes Off
         };
         return unmap[miniCc] !== undefined ? unmap[miniCc] : -1;
     }

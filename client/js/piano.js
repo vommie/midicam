@@ -75,7 +75,7 @@ export class Pianos {
     }
 
     getMIDIMessage = (message, src='local') => {
-        const command = message.data[0];
+        const command = message.data[0] & 0xF0;
         const note = message.data[1];
         const velocity = (message.data.length > 2) ? message.data[2] : 0;
 
@@ -95,10 +95,16 @@ export class Pianos {
                     this.sustainPedal(velocity, src);
                 }
                 else if(note === 66) { // sostenuto pedal
-                    this.sostenutoPedal(velocity === 127, src);
+                    this.sostenutoPedal(velocity >= 64, src);
                 }
                 else if(note === 67) { // soft pedal
-                    this.softPedal(velocity === 127, src);
+                    this.softPedal(velocity >= 64, src);
+                }
+                else if(note === 120 || note === 123) { // All Sound Off / All Notes Off
+                    this.allNotesOff(src);
+                }
+                else if(note === 121) { // Reset All Controllers
+                    this.resetControllers(src);
                 }
                 break;
         }
@@ -122,6 +128,14 @@ export class Pianos {
 
     softPedal(state, src) {
         this.pianos.forEach(piano => piano.softPedal(state, src));
+    }
+
+    allNotesOff(src) {
+        this.pianos.forEach(piano => piano.allNotesOff(src));
+    }
+
+    resetControllers(src) {
+        this.pianos.forEach(piano => piano.resetControllers(src));
     }
 
     createPiano(opts = {}, logger = false) {
@@ -908,11 +922,11 @@ class Piano {
         if(!this.opts.pedalSoft) return;
 
         let activate;
-        if (src === 'local') {
+        if (src === 'local' && state === null) {
             activate = !this.pedalStates.soft;
             if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 67, activate ? 127 : 0]));
         } else {
-            if (!this.opts.receiveMidi) return;
+            if (src === 'remote' && !this.opts.receiveMidi) return;
             activate = state;
         }
 
@@ -924,11 +938,11 @@ class Piano {
         if(!this.opts.pedalSostenuto) return;
 
         let activate;
-        if (src === 'local') {
+        if (src === 'local' && state === null) {
             activate = !this.pedalStates.sostenuto;
             if(this.opts.sendMidi) this.sendMidiMessage(new Uint8Array([176, 66, activate ? 127 : 0]));
         } else {
-            if (!this.opts.receiveMidi) return;
+            if (src === 'remote' && !this.opts.receiveMidi) return;
             activate = state;
         }
 
@@ -962,6 +976,39 @@ class Piano {
             });
             this.sustainedKeyIds.clear();
         }
+    }
+
+    allNotesOff(src) {
+        if (src === 'remote' && !this.opts.receiveMidi) return;
+
+        const keysToRelease = Array.from(this.pressedKeys);
+        keysToRelease.forEach(keyId => {
+            const keyElement = this.elements.keys[keyId];
+            if (keyElement) {
+                this.queueVisualUpdate(keyId, 0, src, 'off');
+            }
+            this.pressedKeys.delete(keyId);
+
+            const keyName = this.getKeyName(keyId, true, 'major', false);
+            if (this.opts.playMidiNotes && this.soundPlayer) {
+                this.soundPlayer.stopNote(keyName);
+            }
+        });
+
+        this.sustainedKeyIds.forEach(id => {
+            const keyName = this.getKeyName(id, true, 'major', false);
+            if (this.opts.playMidiNotes && this.soundPlayer) {
+                this.soundPlayer.stopNote(keyName);
+            }
+        });
+        this.sustainedKeyIds.clear();
+    }
+
+    resetControllers(src) {
+        if (src === 'remote' && !this.opts.receiveMidi) return;
+        this.sustainPedal(0, src);
+        this.sostenutoPedal(false, src);
+        this.softPedal(false, src);
     }
 
     scaleTransparency(velocity) {
