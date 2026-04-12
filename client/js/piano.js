@@ -1,10 +1,10 @@
 import { SoundPlayer } from "./soundPlayer.js";
 
-class Pianos {
+export class Pianos {
 
     constructor() {
         this.midiEnabled = false;
-        this.pianos =[];
+        this.pianos = [];
         this.keys = this.createKeys();
         this.logger = {
             info: () => {},
@@ -52,13 +52,17 @@ class Pianos {
     requestMidi() {
         if(this.midiEnabled) return;
         document.addEventListener("DOMContentLoaded", ()=> {
-            navigator.requestMIDIAccess()
-                .then(this.onMIDISuccess, this.onMIDIFailure);
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess()
+                    .then(this.onMIDISuccess, this.onMIDIFailure);
+            } else {
+                this.logger.warn('Web MIDI API not supported in this browser.');
+            }
         });
     }
 
     onMIDIFailure = () => {
-        this.logger.error('No midi device acccess!');
+        this.logger.error('No midi device access!');
         this.midiEnabled = false;
     }
 
@@ -71,9 +75,9 @@ class Pianos {
     }
 
     getMIDIMessage = (message, src='local') => {
-        let command = message.data[0];
-        let note = message.data[1];
-        let velocity = (message.data.length > 2) ? message.data[2] : 0;
+        const command = message.data[0];
+        const note = message.data[1];
+        const velocity = (message.data.length > 2) ? message.data[2] : 0;
 
         switch(command) {
             case 144: // noteOn
@@ -101,38 +105,23 @@ class Pianos {
     }
 
     noteOn = (note, velocity, src = 'local') => {
-        this.logger.debug(`Note On: ${note}, Velocity: ${velocity}, Source: ${src}`);
-        this.pianos.forEach(piano => {
-            piano.handleNoteOn(note, velocity, src);
-        });
+        this.pianos.forEach(piano => piano.handleNoteOn(note, velocity, src));
     }
 
     noteOff = (note, src = 'local') => {
-        this.logger.debug(`Note Off: ${note}`);
-        this.pianos.forEach(piano => {
-            piano.handleNoteOff(note, src);
-        });
+        this.pianos.forEach(piano => piano.handleNoteOff(note, src));
     }
 
     sustainPedal(velocity, src) {
-        this.logger.debug(`Sustain Pedal: ${velocity} from ${src}`);
-        this.pianos.forEach(piano=>{
-            piano.sustainPedal(velocity, src);
-        });
+        this.pianos.forEach(piano => piano.sustainPedal(velocity, src));
     }
 
     sostenutoPedal(state, src) {
-        this.logger.debug(`Sostenuto Pedal: ${state} from ${src}`);
-        this.pianos.forEach(piano=>{
-            piano.sostenutoPedal(state, src);
-        });
+        this.pianos.forEach(piano => piano.sostenutoPedal(state, src));
     }
 
     softPedal(state, src) {
-        this.logger.debug(`Soft Pedal: ${state} from ${src}`);
-        this.pianos.forEach(piano=>{
-            piano.softPedal(state, src);
-        });
+        this.pianos.forEach(piano => piano.softPedal(state, src));
     }
 
     createPiano(opts = {}, logger = false) {
@@ -140,7 +129,6 @@ class Pianos {
 
         const pianoId = this.pianos.length;
         const loadedOpts = this.loadPianoSettings(pianoId);
-
         const finalOpts = { ...opts, ...loadedOpts };
 
         if(finalOpts.fromKey == undefined) finalOpts.fromKey = 1;
@@ -153,7 +141,7 @@ class Pianos {
         if(finalOpts.pedalSoft == undefined) finalOpts.pedalSoft = true;
         if(finalOpts.pedalSostenuto == undefined) finalOpts.pedalSostenuto = true;
         if(finalOpts.pedalSustain == undefined) finalOpts.pedalSustain = true;
-        if(finalOpts.undampedStrings == undefined) finalOpts.undampedStrings = ['G6', 'C8'];
+        if(finalOpts.undampedStrings == undefined) finalOpts.undampedStrings =['G6', 'C8'];
         else if(finalOpts.undampedStrings === false) finalOpts.undampedStrings = [];
 
         const piano = new Piano(pianoId, this.keys, finalOpts, this);
@@ -181,9 +169,9 @@ class Pianos {
 
     createKeys() {
         let keys = {}, octave = 0;
-        const blackKeyIndexes =[0, 2, 5, 7, 10];
+        const blackKeyIndexes = [0, 2, 5, 7, 10];
         for(let i = 1; i <= 88; i++) {
-            let keyIndex = i%12;
+            let keyIndex = i % 12;
             keys[i] = this.createKey(octave, (octave * 12) + (i+8)%12, blackKeyIndexes.includes(keyIndex));
             if(keyIndex === 3) octave++;
         }
@@ -211,10 +199,15 @@ class Piano {
 
         this.boxShadows = {};
         this.scaleFactor = 1;
-        this.sustainedKeyIds =[];
-        this.pressedKeys =[];
-        this.soundPlayer = new SoundPlayer();
-        if(this.opts.undampedStrings.length > 1) this.opts.undampedStrings = this.getUndampedStringsRangeNotes(this.opts.undampedStrings[0], this.opts.undampedStrings[1]);
+
+        this.sustainedKeyIds = new Set();
+        this.pressedKeys = new Set();
+
+        this.soundPlayer = new SoundPlayer(this.logger);
+
+        if(this.opts.undampedStrings.length > 1) {
+            this.opts.undampedStrings = this.getUndampedStringsRangeNotes(this.opts.undampedStrings[0], this.opts.undampedStrings[1]);
+        }
 
         this.logger.info(`Creating new Piano (ID: ${this.id})`);
         this.logger.debug(`Piano ${this.id} created with options: ${JSON.stringify(this.opts)}`);
@@ -227,7 +220,7 @@ class Piano {
         this.templates = this.getTemplates();
         this.elements = {};
         this.elements.piano = this.insertPiano();
-        this.elements.keys =[];
+        this.elements.keys = [];
         this.elements.pedals = this.initPedalElements();
 
         if (this.opts.height) {
@@ -238,18 +231,37 @@ class Piano {
         this.updateDynamicStyles();
         this.setPedalButtonsVisibility();
         this.insertKeys();
-        this.mouseIsDown = false;
-        this.addMouseHandling();
+
+        this.activePointers = new Map();
+        this.initPointerHandling();
+
         if(!opts.noScale === true) this.handleResize();
         this.initResizing();
         this.sendMidiMessage = this.opts.sendMidiMessage || (() => {});
+
+        if (this.opts.playMidiNotes) {
+            this.soundPlayer.preload();
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+                if (this.visualFrameRequested) {
+                    this.applyVisualUpdates();
+                }
+                this.releaseAllLocalKeys();
+            }
+        });
     }
 
     queueVisualUpdate(keyId, velocity, src, state) {
         this.pendingVisualUpdates.set(keyId, { velocity, src, state });
         if (!this.visualFrameRequested) {
             this.visualFrameRequested = true;
-            requestAnimationFrame(() => this.applyVisualUpdates());
+            if (document.hidden) {
+                queueMicrotask(() => this.applyVisualUpdates());
+            } else {
+                requestAnimationFrame(() => this.applyVisualUpdates());
+            }
         }
     }
 
@@ -257,7 +269,11 @@ class Piano {
         this.pendingPedalUpdates.set(pedalName, { state, src });
         if (!this.visualFrameRequested) {
             this.visualFrameRequested = true;
-            requestAnimationFrame(() => this.applyVisualUpdates());
+            if (document.hidden) {
+                queueMicrotask(() => this.applyVisualUpdates());
+            } else {
+                requestAnimationFrame(() => this.applyVisualUpdates());
+            }
         }
     }
 
@@ -311,15 +327,16 @@ class Piano {
         <div class="case">
             <div class="piano-settings-container"></div>
             <div class="pedals">
-                <div class="pedal-soft"><button id="pedal-soft-${this.id}">Soft</div>
-                <div class="pedal-sostenuto"><button id="pedal-sostenuto-${this.id}">Sost</div>
-                <div class="pedal-sustain"><button id="pedal-sustain-${this.id}">Sus</div>
+                <div class="pedal-soft"><button id="pedal-soft-${this.id}">Soft</button></div>
+                <div class="pedal-sostenuto"><button id="pedal-sostenuto-${this.id}">Sost</button></div>
+                <div class="pedal-sustain"><button id="pedal-sustain-${this.id}">Sus</button></div>
             </div>
         </div>
         <div class="felt"></div>
         <div class="bar white"></div>
         <div class="bar black"></div>`;
         templates['piano'] = piano;
+
         const pianoKey = document.createElement('div');
         pianoKey.classList.add('piano-key');
         templates['pianoKey'] = pianoKey;
@@ -339,7 +356,7 @@ class Piano {
                 }
                 else throw `Cannot find element for given piano selector "${this.opts.selector}"`;
             }
-            else document.body.appendChild(piano);;
+            else document.body.appendChild(piano);
         }
         catch(err) {
             this.logger.error(err);
@@ -408,8 +425,7 @@ class Piano {
                 if(!this.keys[id+1].isBlack) {
                     barBlack.appendChild(this.createKey(false,true));
                 }
-            }
-            catch(error) {};
+            } catch(error) {}
             if(!isLastKey) barBlack.appendChild(this.createKey(false, true, isFirstKey));
         }
         else {
@@ -433,16 +449,106 @@ class Piano {
             if (!this.isKeyInRange(id)) {
                 key.classList.add('out-of-range');
             }
-
-            key.addEventListener('mousedown', e => { this.onKeyPress(e); });
-            key.addEventListener('mouseup', e => { this.onKeyRelease(e); });
-            key.addEventListener('mousemove', e => { this.onMouseMove(e); });
             this.elements.keys[id] = key;
         }
         if(hidden) key.classList.add('hidden');
         if(offset) key.classList.add('offset');
         key.innerHTML = `<div class="key-pressed"></div>`;
         return key;
+    }
+
+    initPointerHandling() {
+        const container = this.elements.piano.container;
+
+        container.addEventListener('pointerdown', this.handlePointerDown.bind(this));
+        container.addEventListener('pointermove', this.handlePointerMove.bind(this));
+
+        window.addEventListener('pointerup', this.handlePointerUp.bind(this));
+        window.addEventListener('pointercancel', this.handlePointerUp.bind(this));
+        window.addEventListener('blur', () => this.releaseAllLocalKeys());
+    }
+
+    handlePointerDown(e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        const keyEl = e.target.closest('.piano-key');
+        if (!keyEl) return;
+
+        const id = parseInt(keyEl.dataset.id, 10);
+        if (!this.isKeyInRange(id)) return;
+
+        this.activePointers.set(e.pointerId, id);
+        this.triggerLocalNoteOn(id, 127);
+
+        try { this.elements.piano.container.setPointerCapture(e.pointerId); } catch(err) {}
+    }
+
+    handlePointerMove(e) {
+        if (!this.activePointers.has(e.pointerId)) return;
+
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const keyEl = el ? el.closest('.piano-key') : null;
+        const previousId = this.activePointers.get(e.pointerId);
+
+        if (!keyEl) {
+            if (previousId) {
+                this.triggerLocalNoteOff(previousId);
+                this.activePointers.set(e.pointerId, null);
+            }
+            return;
+        }
+
+        const id = parseInt(keyEl.dataset.id, 10);
+        if (!this.isKeyInRange(id)) {
+            if (previousId) {
+                this.triggerLocalNoteOff(previousId);
+                this.activePointers.set(e.pointerId, null);
+            }
+            return;
+        }
+
+        if (id !== previousId) {
+            if (previousId) this.triggerLocalNoteOff(previousId);
+            this.activePointers.set(e.pointerId, id);
+            this.triggerLocalNoteOn(id, 127);
+        }
+    }
+
+    handlePointerUp(e) {
+        if (!this.activePointers.has(e.pointerId)) return;
+
+        const previousId = this.activePointers.get(e.pointerId);
+        if (previousId) {
+            this.triggerLocalNoteOff(previousId);
+        }
+
+        this.activePointers.delete(e.pointerId);
+        try { this.elements.piano.container.releasePointerCapture(e.pointerId); } catch(err) {}
+    }
+
+    triggerLocalNoteOn(id, velocity) {
+        this.queueVisualUpdate(id, velocity, 'local', 'on');
+        this.playNote(id, velocity);
+        if (this.opts.sendMidi) {
+            const midiNote = parseInt(this.elements.keys[id].dataset.midiNote, 10);
+            this.sendMidiMessage(new Uint8Array([144, midiNote, velocity]));
+        }
+    }
+
+    triggerLocalNoteOff(id) {
+        this.queueVisualUpdate(id, 0, 'local', 'off');
+        this.stopNote(id);
+        if (this.opts.sendMidi) {
+            const midiNote = parseInt(this.elements.keys[id].dataset.midiNote, 10);
+            this.sendMidiMessage(new Uint8Array([128, midiNote, 0]));
+        }
+    }
+
+    releaseAllLocalKeys() {
+        this.activePointers.forEach((keyId) => {
+            if (keyId) this.triggerLocalNoteOff(keyId);
+        });
+        this.activePointers.clear();
     }
 
     createSettingsUI() {
@@ -541,6 +647,10 @@ class Piano {
             this.updateKeyRangeStyles();
         }
 
+        if (this.opts.playMidiNotes && !oldOpts.playMidiNotes) {
+            this.soundPlayer.preload();
+        }
+
         this.manager.savePianoSettings(this.id, this.opts);
 
         if (this.opts.onSettingsChange) {
@@ -562,7 +672,6 @@ class Piano {
             }
         }
     }
-
 
     handleRangeSliderInput = () => {
         const fromSlider = document.getElementById(`fromKey-${this.id}`);
@@ -636,27 +745,27 @@ class Piano {
             'sostenuto': container.querySelector(`#pedal-sostenuto-${this.id}`),
             'sustain': container.querySelector(`#pedal-sustain-${this.id}`),
         }
-        elements.soft.addEventListener('click', e=>{this.softPedal(null, 'local');});
-        elements.sostenuto.addEventListener('click', e=>{this.sostenutoPedal(null, 'local');});
-        elements.sustain.addEventListener('click', e=>{this.sustainPedal(null, 'local');});
+        elements.soft.addEventListener('pointerdown', e => { this.softPedal(null, 'local'); });
+        elements.sostenuto.addEventListener('pointerdown', e => { this.sostenutoPedal(null, 'local'); });
+        elements.sustain.addEventListener('pointerdown', e => { this.sustainPedal(null, 'local'); });
         return elements;
     }
 
     getKeyName(id, includeOctave = false, accidental = false, useUnicodeAccidental = true) {
         const noteNames = { 1: 'A', 3: 'B', 4: 'C', 6: 'D', 8: 'E', 9: 'F', 11: 'G' };
-        let keyIndex = id%12;
+        let keyIndex = id % 12;
         let keyLeftIndex = keyIndex === 0 ? 11 : keyIndex -1;
         let keyRightIndex = keyIndex === 11 ? 0 : keyIndex +1;
         let octave = this.keys[id].octave;
         const flatChar = useUnicodeAccidental ? '♭' : 'b';
         const majorChar = useUnicodeAccidental ? '♯' : '#';
+
         if(keyIndex in noteNames) {
             if(!accidental || (keyIndex !== 3 && keyIndex !== 8)) return includeOctave ? `${noteNames[keyIndex]}${octave}` : noteNames[keyIndex];
             else if(!accidental || (keyIndex === 3 || keyIndex === 8)) return includeOctave ? `${noteNames[keyIndex]}${octave}` : noteNames[keyIndex];
             else if(accidental == 'flat') return includeOctave ? `${noteNames[keyRightIndex]}${flatChar}${octave}` : `${noteNames[keyRightIndex]}${flatChar}`;
             else if(accidental == 'major') return includeOctave ? `${noteNames[keyLeftIndex]}${majorChar}${octave}` : `${noteNames[keyLeftIndex]}${flatChar}`;
-        }
-        else {
+        } else {
             if(!accidental) return includeOctave ? `${noteNames[keyLeftIndex]}${majorChar}${octave}/${noteNames[keyRightIndex]}${flatChar}${octave}` : `${noteNames[keyLeftIndex]}${majorChar}/${noteNames[keyRightIndex]}${flatChar}`;
             else if(accidental == 'flat') return includeOctave ? `${noteNames[keyRightIndex]}${flatChar}${octave}` : `${noteNames[keyRightIndex]}${flatChar}`;
             else if(accidental == 'major') return includeOctave ? `${noteNames[keyLeftIndex]}${majorChar}${octave}` : `${noteNames[keyLeftIndex]}${majorChar}`;
@@ -676,10 +785,12 @@ class Piano {
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
             this.queueVisualUpdate(keyId, velocity, src, 'on');
-            if (this.pressedKeys.indexOf(keyElement.dataset.id) === -1) {
-                this.pressedKeys.push(keyElement.dataset.id);
-            }
+            this.pressedKeys.add(keyId);
             this.playNote(keyId, velocity);
+
+            if (src === 'remote') {
+                this.logger.debug(`Piano ${this.id}: Remote NoteOn -> ${this.getKeyName(keyId)} (vel: ${velocity})`);
+            }
         }
     }
 
@@ -691,82 +802,32 @@ class Piano {
         const keyElement = this.elements.keys[keyId];
         if (keyElement) {
             this.queueVisualUpdate(keyId, 0, src, 'off');
-            const index = this.pressedKeys.indexOf(keyElement.dataset.id);
-            if (index > -1) {
-                this.pressedKeys.splice(index, 1);
+            this.pressedKeys.delete(keyId);
+            this.stopNote(keyId);
+
+            if (src === 'remote') {
+                this.logger.debug(`Piano ${this.id}: Remote NoteOff -> ${this.getKeyName(keyId)}`);
             }
-            if (this.opts.playMidiNotes) {
-                this.stopNote(keyElement.dataset.id);
-            }
         }
-    }
-
-    onKeyPress(e) {
-        if (e.which != 1) return;
-        let id = e.currentTarget.dataset.id;
-        if (!this.isKeyInRange(id)) return;
-
-        this.lastKeyId = id;
-        this.queueVisualUpdate(id, 127, 'local', 'on');
-        this.playNote(id);
-        if (this.opts.sendMidi) {
-            this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
-        }
-    }
-
-    onKeyRelease(e) {
-        if (e.which != 1) return;
-        let id = e.currentTarget.dataset.id;
-        if (!this.isKeyInRange(id)) return;
-
-        this.queueVisualUpdate(id, 0, 'local', 'off');
-        this.stopNote(id);
-        if (this.opts.sendMidi) {
-            this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[id].dataset.midiNote), 0]));
-        }
-    }
-
-    onMouseMove(e) {
-        if (!this.mouseIsDown || e.which != 1) return;
-        let id = e.currentTarget.dataset.id;
-        if (!this.isKeyInRange(id)) return;
-        if (id == this.lastKeyId) return;
-
-        this.queueVisualUpdate(this.lastKeyId, 0, 'local', 'off');
-        this.stopNote(this.lastKeyId);
-        if (this.opts.sendMidi) {
-            this.sendMidiMessage(new Uint8Array([128, parseInt(this.elements.keys[this.lastKeyId].dataset.midiNote), 0]));
-        }
-
-        this.lastKeyId = id;
-        this.playNote(id);
-        if (this.opts.sendMidi) {
-            this.sendMidiMessage(new Uint8Array([144, parseInt(this.elements.keys[id].dataset.midiNote), 127]));
-        }
-        this.queueVisualUpdate(id, 127, 'local', 'on');
-    }
-
-    addMouseHandling() {
-        this.elements.piano.container.addEventListener('mousedown', e => {
-            this.mouseIsDown = true;
-        });
-        this.elements.piano.container.addEventListener('mouseup', e => {
-            this.mouseIsDown = false;
-        });
     }
 
     playNote(id, velocity = 127) {
-        if(this.opts.playMidiNotes) this.soundPlayer.playNote(this.getKeyName(id, true, 'major', false), velocity);
+        if(this.opts.playMidiNotes) {
+            this.soundPlayer.playNote(this.getKeyName(id, true, 'major', false), velocity);
+        }
     }
 
     stopNote(id) {
         const keyName = this.getKeyName(id, true, 'major', false);
         if(this.opts.undampedStrings.includes(keyName)) return;
-        if(this.pedalStates.sustain) {
-            if(this.sustainedKeyIds.indexOf(id) === -1)  this.sustainedKeyIds.push(id);
+
+        if (this.pedalStates.sustain) {
+            this.sustainedKeyIds.add(parseInt(id, 10));
             return;
         }
-        this.soundPlayer.stopNote(keyName);
+        if (this.opts.playMidiNotes && this.soundPlayer) {
+            this.soundPlayer.stopNote(keyName);
+        }
     }
 
     handleResize() {
@@ -780,10 +841,11 @@ class Piano {
     resizePiano() {
         this.elements.piano.container.style.maxWidth = `100%`;
         let pianoRect = this.elements.piano.container.getBoundingClientRect();
-        let keyWhiteWidth = pianoRect.width/this.elements.piano.barWhite.childElementCount;
-        let factor = keyWhiteWidth/20;
+        let keyWhiteWidth = pianoRect.width / this.elements.piano.barWhite.childElementCount;
+        let factor = keyWhiteWidth / 20;
         this.scaleFactor = factor;
-        let keyBlackWidth = keyWhiteWidth/4;
+        let keyBlackWidth = keyWhiteWidth / 4;
+
         this.elements.piano.container.style.maxWidth = `${pianoRect.width}px`;
         this.elements.piano.barWhite.style.gridAutoColumns = `${keyWhiteWidth}px`;
         this.elements.piano.barBlack.style.gridAutoColumns = `${keyBlackWidth}px`;
@@ -796,6 +858,7 @@ class Piano {
             key.style.borderBottomRightRadius = `${3*factor}px`;
             key.style.boxShadow = this.boxShadows.keyWhite;
         }
+
         let keysBlack = this.elements.piano.container.querySelectorAll(`.bar.black .piano-key`);
         this.boxShadows.keyBlack = `inset 0px ${-4*factor}px ${1*factor}px rgba(255, 255, 255, .5)`;
         for(let i = 0; i < keysBlack.length; i++) {
@@ -803,7 +866,7 @@ class Piano {
             key.style.borderBottomLeftRadius = `${1*factor}px`;
             key.style.borderBottomRightRadius = `${1*factor}px`;
             key.style.boxShadow = this.boxShadows.keyBlack;
-            key.querySelector('.key-pressed').boxShadow = `inset 0px ${-4*factor}px ${1*factor}px rgba(255, 255, 255, .5)`;
+            key.querySelector('.key-pressed').boxShadow = `inset 0px ${-4*factor}px ${1*factor}px rgba(255, 255, 255, .2)`;
         }
 
         this.elements.pedals.container.style.height = `${12.5*factor}px`;
@@ -818,9 +881,11 @@ class Piano {
         keyElement.classList.add('active');
         keyElement.style.background = `rgba(255, 255, 255, 1)`;
         keyElement.style.boxShadow = `none`;
+
         const midiColor = keyElement.querySelector('.key-pressed');
         const rgb = src == 'local' ? this.opts.keyPressedLocalRGB.join(',') : this.opts.keyPressedRemoteRGB.join(',');
         midiColor.style.background = `rgba(${rgb}, ${this.scaleTransparency(velocity)})`;
+
         if(keyElement.parentElement.classList.contains('white')) {
             midiColor.style.boxShadow = `inset 0px ${2*this.scaleFactor}px ${14*this.scaleFactor}px 0px rgba(0, 0, 0, .5)`;
         }
@@ -888,13 +953,14 @@ class Piano {
 
         if (!activate) {
             this.sustainedKeyIds.forEach(id => {
-                if(this.pressedKeys.includes(id)) return;
-                this.stopNote(id);
-                if (this.opts.sendMidi && src === 'local') {
-                    this.sendMidiMessage(new Uint8Array([128, parseInt(id) + 20, 0]));
+                if (this.pressedKeys.has(id)) return;
+
+                const keyName = this.getKeyName(id, true, 'major', false);
+                if (this.opts.playMidiNotes && this.soundPlayer) {
+                    this.soundPlayer.stopNote(keyName);
                 }
             });
-            this.sustainedKeyIds =[];
+            this.sustainedKeyIds.clear();
         }
     }
 
@@ -933,7 +999,7 @@ class Piano {
         const startNoteIndex = notes.indexOf(startNote.substring(0, 1));
         const endNoteIndex = notes.indexOf(endNote.substring(0, 1));
 
-        let result =[];
+        let result = [];
         for(let i = startOctave; i <= endOctave; i++) {
             for(let j = (i === startOctave ? startNoteIndex : 0); j < notes.length; j++) {
                 if(i === endOctave && j > endNoteIndex) break;
@@ -968,8 +1034,4 @@ class Piano {
         if (receiveLed) receiveLed.classList.remove('warning');
         if (sendLed) sendLed.classList.remove('warning');
     }
-}
-
-export {
-    Pianos
 }

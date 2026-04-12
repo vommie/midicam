@@ -584,7 +584,6 @@ function flushMiniBuffer() {
 
     try {
         const miniWords = MINICodec.encode(miniPendingEvents);
-        logger.debug(`[MINI] Encoded ${miniPendingEvents.length} generic MIDI events into ${miniWords.length} MINI words.`);
         miniWords.forEach(word => midiOutBuffer.push(word));
     } catch (err) {
         logger.error(`Error encoding MINI format: ${err.message}`);
@@ -598,7 +597,7 @@ function queueMidiForNetwork(midiDataUint8) {
     if (midiDiagnostics.settings.payloadEncoding === 'mini') {
         miniPendingEvents.push(Array.from(midiDataUint8));
         if (!miniChordTimer) {
-            miniChordTimer = setTimeout(() => {
+            miniChordTimer = bgTimer.setTimeout(() => {
                 flushMiniBuffer();
             }, midiDiagnostics.settings.chordWindowMs || 10);
         }
