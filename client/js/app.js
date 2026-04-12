@@ -1252,8 +1252,10 @@ function handleIncomingMidiBuffer(arrayBuffer) {
     if (!pianoInstance || !pianoInstance.opts.receiveMidi) return;
 
     const delay = midiDiagnostics.getEffectiveJitter();
+
     if (delay > 0) {
-        bgTimer.setTimeout(() => extractAndPlayMidi(uint8View, 11, encodingFormat), delay);
+        const copiedView = new Uint8Array(arrayBuffer.slice(0));
+        bgTimer.setTimeout(() => extractAndPlayMidi(copiedView, 11, encodingFormat), delay);
     } else {
         extractAndPlayMidi(uint8View, 11, encodingFormat);
     }
@@ -1467,7 +1469,11 @@ async function startScreenShare() {
         activeScreenShares.set(streamId, { window: localWindow, sender });
 
         track.onended = () => stopScreenShare(streamId, true);
-        localWindow.wrapper.addEventListener('close', () => track.stop());
+
+        localWindow.wrapper.addEventListener('close', () => {
+            track.stop();
+            stopScreenShare(streamId, true);
+        });
 
     } catch (err) {
         logger.error(`Error starting screen share: ${err.message}`);

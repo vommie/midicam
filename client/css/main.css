@@ -1432,7 +1432,7 @@ video:fullscreen {
 
 .log-entry {
     display: grid;
-    grid-template-columns: 70px 60px 1fr;
+    grid-template-columns: auto auto 1fr;
     gap: 15px;
     padding: 4px 8px;
     border-radius: 4px;

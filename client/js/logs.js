@@ -1,5 +1,3 @@
-import { Dialog } from './dialog.js';
-
 export class Log {
     constructor(options) {
         this.toggleButton = document.querySelector(options.toggleButtonSelector);
@@ -23,14 +21,18 @@ export class Log {
         }
 
         this.isVisible = false;
-        this.allEntries =[];
+
+        this.allEntries = [];
+        this.maxEntries = 50000;
+        this.maxVisibleEntries = 1000;
+
         this.currentSearchTerm = '';
         this.currentLevelFilter = 'all';
 
         this.logLevels = { 'error': 4, 'warn': 3, 'info': 2, 'debug': 1 };
         this.verbosityLevel = 'info';
 
-        this.pendingLogs =[];
+        this.pendingLogs = [];
         this.logUpdateQueued = false;
 
         this._loadSettings();
@@ -56,7 +58,7 @@ export class Log {
                             <option value="info">Info</option>
                             <option value="debug">Debug</option>
                         </select>
-                        <label for="log-verbosity-level" class="log-verbosity-label">Log Level:</label>
+                        <label for="log-verbosity-level" class="log-verbosity-label">Min. Level:</label>
                         <select id="log-verbosity-level" class="log-level-filter">
                             <option value="error">Error</option>
                             <option value="warn">Warn</option>
@@ -92,46 +94,9 @@ export class Log {
         });
 
         this.verbositySelector.addEventListener('change', () => {
-            const newLevel = this.verbositySelector.value;
-            const oldLevel = this.verbosityLevel;
-
-            if (newLevel === 'debug') {
-                new Dialog({
-                    title: 'Performance Warning',
-                    body: `
-                        <p>Enabling the "Debug" log level can generate a very high volume of log entries.</p>
-                        <p>This may negatively impact application performance, especially affecting real-time operations like MIDI processing, and could lead to high CPU usage.</p>
-                        <p><strong>Are you sure you want to proceed?</strong></p>
-                    `,
-                    width: '550px',
-                    buttons: [
-                        {
-                            text: 'Cancel',
-                            callback: (dialog) => {
-                                this.verbositySelector.value = oldLevel;
-                                dialog.close();
-                            }
-                        },
-                        {
-                            text: 'Proceed',
-                            className: 'danger',
-                            callback: (dialog) => {
-                                this.verbosityLevel = newLevel;
-                                this._saveSettings();
-                                dialog.close();
-                            }
-                        }
-                    ],
-                    onClose: () => {
-                        if (this.verbositySelector.value === 'debug' && this.verbosityLevel !== 'debug') {
-                             this.verbositySelector.value = oldLevel;
-                        }
-                    }
-                }).show();
-            } else {
-                this.verbosityLevel = newLevel;
-                this._saveSettings();
-            }
+            this.verbosityLevel = this.verbositySelector.value;
+            this._saveSettings();
+            this._applyFilters();
         });
 
         this.exportButton.addEventListener('click', () => this._exportLogs());
@@ -156,6 +121,7 @@ export class Log {
         this.isVisible = true;
         this.toggleButton.classList.add('active');
         this.modalElement.classList.remove('hidden');
+        this._applyFilters();
     }
 
     hide() {
@@ -169,22 +135,40 @@ export class Log {
         this.isVisible ? this.hide() : this.show();
     }
 
-    _applyFilters() {
-        this.allEntries.forEach(entry => {
-            if (!entry.element) return;
-            const searchMatch = entry.message.toLowerCase().includes(this.currentSearchTerm);
-            const levelMatch = this.currentLevelFilter === 'all' || entry.level === this.currentLevelFilter;
+    _escapeHTML(str) {
+        return String(str).replace(/[&<>'"]/g, tag => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;'
+        }[tag]));
+    }
 
-            if (searchMatch && levelMatch) {
-                entry.element.classList.remove('hidden');
-            } else {
-                entry.element.classList.add('hidden');
-            }
+    _applyFilters() {
+        if (!this.logContainer || !this.isVisible) return;
+
+        const filtered = this.allEntries.filter(entry => {
+            if (this.logLevels[entry.level] < this.logLevels[this.verbosityLevel]) return false;
+            if (this.currentLevelFilter !== 'all' && entry.level !== this.currentLevelFilter) return false;
+            if (this.currentSearchTerm && !entry.message.toLowerCase().includes(this.currentSearchTerm)) return false;
+            return true;
         });
+
+        const toRender = filtered.slice(-this.maxVisibleEntries);
+        let htmlChunk = '';
+        toRender.forEach(entry => {
+            const timeStr = entry.timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+            htmlChunk += `<div class="log-entry ${entry.level}"><span class="timestamp">${timeStr}</span><span class="level">${entry.level.toUpperCase()}</span><span class="message">${this._escapeHTML(entry.message)}</span></div>`;
+        });
+
+        this.logContainer.innerHTML = htmlChunk;
+        this.logContainer.scrollTop = this.logContainer.scrollHeight;
     }
 
     _exportLogs() {
-        const header = `MidiCam Log Export - ${new Date().toLocaleString()}\n==================================================\n\n`;
+        const date = new Date();
+        const header = `MidiCam Log Export - ${date.toLocaleString()}\n==================================================\n\n`;
 
         const logContent = this.allEntries.map(entry => {
             const timestamp = entry.timestamp.toISOString();
@@ -196,9 +180,9 @@ export class Log {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
 
-        const date = new Date().toISOString().slice(0, 10);
+        const dateTime = date.toISOString().replace('T', '_').replace(/:/g, '-').split('.')[0];
         a.href = url;
-        a.download = `midicam_${date}.log`;
+        a.download = `midicam_${dateTime}.log`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -206,23 +190,28 @@ export class Log {
     }
 
     _add(level, message) {
-        if (this.logLevels[level] < this.logLevels[this.verbosityLevel]) {
-            return;
-        }
-
-        if (!this.logContainer) {
-            console[level === 'error' ? 'error' : 'log'](`[${level.toUpperCase()}] ${message}`);
-            return;
-        }
+        if (level === 'error') console.error(`[${level.toUpperCase()}] ${message}`);
+        else if (level === 'warn') console.warn(`[${level.toUpperCase()}] ${message}`);
+        else if (level === 'info') console.info(`[${level.toUpperCase()}] ${message}`);
+        else console.log(`[${level.toUpperCase()}] ${message}`);
 
         const entry = {
             level,
             message,
-            timestamp: new Date(),
-            element: null
+            timestamp: new Date()
         };
 
         this.allEntries.push(entry);
+        if (this.allEntries.length > this.maxEntries) {
+            this.allEntries.shift();
+        }
+
+        if (!this.isVisible) return;
+
+        if (this.logLevels[level] < this.logLevels[this.verbosityLevel]) return;
+        if (this.currentLevelFilter !== 'all' && level !== this.currentLevelFilter) return;
+        if (this.currentSearchTerm && !message.toLowerCase().includes(this.currentSearchTerm)) return;
+
         this.pendingLogs.push(entry);
 
         if (!this.logUpdateQueued) {
@@ -233,41 +222,30 @@ export class Log {
 
     _flushLogs() {
         this.logUpdateQueued = false;
-        if (!this.logContainer) return;
+
+        if (!this.logContainer || !this.isVisible) {
+            this.pendingLogs = [];
+            return;
+        }
 
         const isScrolledToBottom = this.logContainer.scrollHeight - this.logContainer.scrollTop <= this.logContainer.clientHeight + 20;
-        const fragment = document.createDocumentFragment();
 
+        let htmlChunk = '';
         this.pendingLogs.forEach(entry => {
-            const entryElement = document.createElement('div');
-            entryElement.className = `log-entry ${entry.level}`;
-
-            const displayedTimestamp = entry.timestamp.toLocaleTimeString('de-DE', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-
-            entryElement.innerHTML = `
-                <span class="timestamp">${displayedTimestamp}</span>
-                <span class="level">${entry.level.toUpperCase()}</span>
-                <span class="message">${entry.message}</span>
-            `;
-
-            const searchMatch = entry.message.toLowerCase().includes(this.currentSearchTerm);
-            const levelMatch = this.currentLevelFilter === 'all' || entry.level === this.currentLevelFilter;
-
-            if (!searchMatch || !levelMatch) {
-                entryElement.classList.add('hidden');
-            }
-
-            entry.element = entryElement;
-            fragment.appendChild(entryElement);
+            const timeStr = entry.timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+            htmlChunk += `<div class="log-entry ${entry.level}"><span class="timestamp">${timeStr}</span><span class="level">${entry.level.toUpperCase()}</span><span class="message">${this._escapeHTML(entry.message)}</span></div>`;
         });
 
-        this.logContainer.appendChild(fragment);
-        this.pendingLogs = [];
+        if (htmlChunk) {
+            this.logContainer.insertAdjacentHTML('beforeend', htmlChunk);
+        }
 
-        while (this.logContainer.children.length > 500) {
-            this.logContainer.removeChild(this.logContainer.firstChild);
+        this.pendingLogs = [];
+        if (this.logContainer.children.length > this.maxVisibleEntries) {
+            const removeCount = this.logContainer.children.length - this.maxVisibleEntries;
+            for (let i = 0; i < removeCount; i++) {
+                this.logContainer.removeChild(this.logContainer.firstChild);
+            }
         }
 
         if (isScrolledToBottom) {
