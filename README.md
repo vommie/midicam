@@ -1,6 +1,6 @@
 # MidiCam
 
-MidiCam is a collaborative, peer-to-peer WebRTC application designed for real-time online music lessons and virtual piano training. It enables two musicians to see each other via low-latency video, talk, text, share files, and—most importantly—interact through a fully synchronized 88-key virtual piano powered by real-time MIDI.
+MidiCam is a collaborative, peer-to-peer WebRTC application designed for real-time online music lessons and virtual piano training. It enables two musicians to see each other via low-latency video, talk, text, share files, and - most importantly - interact through a fully synchronized 88-key virtual piano powered by real-time MIDI.
 
 *Note: Achieving true real-time, ultra-low-latency audio/video synchronization over weak internet connections is a major technical challenge. This project needs to be more optimized for the best possible network tuning.*
 
