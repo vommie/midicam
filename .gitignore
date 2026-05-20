@@ -15,5 +15,6 @@ build/
 package-lock.json
 client/effects/wunderlich
 client/effects/jizz
+client/effects/piano-teacher
 run_local.py
 run_remote.py

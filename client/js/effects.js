@@ -105,7 +105,6 @@
 import { RainEffect } from '../effects/rain/rain.js';
 import { TumbleweedEffect } from '../effects/tumbleweed/tumbleweed.js';
 import { JizzEffect } from '../effects/jizz/jizz.js';
-import { WunderlichEffect } from '../effects/wunderlich/wunderlich.js';
 import { PianoTeacherEffect } from '../effects/piano-teacher/pianoteacher.js';
 import { MoodBarometerEffect } from '../effects/moodbarometer/moodbarometer.js';
 import { ApplauseEffect } from '../effects/applause/applause.js';
