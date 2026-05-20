@@ -115,7 +115,7 @@ export class Effects {
         this.logger = options.logger;
         this.onSendMessage = options.onSendMessage;
         this.container = document.getElementById('effects-grid');
-        this.effectModules = [RainEffect, TumbleweedEffect, JizzEffect, WunderlichEffect, PianoTeacherEffect, MoodBarometerEffect, ApplauseEffect];
+        this.effectModules = [RainEffect, TumbleweedEffect, /*JizzEffect*/, WunderlichEffect, PianoTeacherEffect, MoodBarometerEffect, ApplauseEffect];
         this.effects = new Map();
         this.activeEffect = null;
         this.effectButtons = new Map();

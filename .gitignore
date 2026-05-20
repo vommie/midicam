@@ -12,3 +12,8 @@ dist/
 schema.png
 prompts.txt
 build/
+package-lock.json
+client/effects/wunderlich
+client/effects/jizz
+run_local.py
+run_remote.py
