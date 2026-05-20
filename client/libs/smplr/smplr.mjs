@@ -1,3 +1,4 @@
+/* This code is from smplr by danigb (MIT License) */
 var __defProp = Object.defineProperty;
 var __defProps = Object.defineProperties;
 var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
